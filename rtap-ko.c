@@ -12,13 +12,10 @@
 #include <linux/netdevice.h>
 #include <linux/netfilter.h>
 
-#include <net/mac80211.h>
-#include <net/ieee80211_radiotap.h>
-
-#define DRIVER_VERSION  "v1.0"
-#define DRIVER_AUTHOR   "Kevin Mahoney <kevin.mahoney@zenotec.net>"
-#define DRIVER_NAME     "rtap"
-#define DRIVER_DESC     "RadioTap forwarder"
+#include "rtap-ko.h"
+#include "filter.h"
+#include "rule.h"
+#include "ksocket.h"
 
 /* Module information */
 MODULE_AUTHOR( DRIVER_AUTHOR );
@@ -27,82 +24,42 @@ MODULE_LICENSE("GPL");
 
 /* Module parameters */
 static char *devname, *ipaddr;
-static int port;
+static int port = 8888;
 module_param( devname, charp, 0 );
 MODULE_PARM_DESC( devname, "Monitor Interface" );
 module_param( ipaddr, charp, 0 );
-MODULE_PARM_DESC( ipaddr, "Remote listener" );
+MODULE_PARM_DESC( ipaddr, "Remote listener address" );
 module_param( port, int, 0 );
 MODULE_PARM_DESC( port, "Remote listen port" );
 
 static struct net_device *netdev = 0;
-
-static int cnt = 100;
+static ksocket_t sockfd;
+static struct sockaddr_in addr;
 
 int rtap_func(struct sk_buff *skb, struct net_device *dev,
               struct packet_type *pt, struct net_device *orig_dev)
 {
-    struct ethhdr *mh = skb->mac_header;
-    struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)skb->data;
-    static struct ieee80211_radiotap_iterator rti;
-    int ret;
-    if(cnt)
+
+    rule_t *rp = &ruletbl[0];
+    rule_cmd_t cmd = RULE_CMD_NONE;
+
+    // Run all rules on frame until drop/forward is returned
+    while( rp->func && (cmd = rp->func( rp->id, rp->cmd, skb->data, rp->val )) == RULE_CMD_NONE )
     {
-    	cnt--;
-        printk(KERN_INFO "Received packet\n");
-        printk(KERN_INFO "            Type: 0x%x\n", skb->pkt_type);
-        printk(KERN_INFO "        Protocol: 0x%x\n", ntohs(skb->protocol));
-        printk(KERN_INFO "    Total Length: %d\n", skb->len);
-        printk(KERN_INFO "     Data Length: %d\n", skb->data_len);
-        printk(KERN_INFO "      Mac Header: 0x%x\n", skb->mac_header);
-        printk(KERN_INFO "  Network Header: 0x%x\n", skb->network_header);
-        printk(KERN_INFO "Transport Header: 0x%x\n", skb->transport_header);
-	if(mh)
-        {
-/*
-            printk(KERN_INFO "   Dest Mac: %x:%x:%x:%x:%x:%x\n", mh->h_dest[0], mh->h_dest[1],
-                   mh->h_dest[2], mh->h_dest[3], mh->h_dest[4], mh->h_dest[5]);
-            printk(KERN_INFO "    Src Mac: %x:%x:%x:%x:%x:%x\n", mh->h_source[0], mh->h_source[1],
-                   mh->h_source[2], mh->h_source[3], mh->h_source[4], mh->h_source[5]);
-            printk(KERN_INFO "      Proto: 0x%x\n", ntohs(mh->h_proto));
-*/
-        } // end if
-        if(rthdr)
-        {
-            printk(KERN_INFO "RadioTap Version: 0x%x\n", rthdr->it_version);
-            printk(KERN_INFO "    RadioTap Pad: 0x%x\n", rthdr->it_pad);
-            printk(KERN_INFO " RadioTap Length: 0x%x\n", rthdr->it_len);
-            printk(KERN_INFO "RadioTap Present: 0x%x\n", rthdr->it_present);
-            ret = ieee80211_radiotap_iterator_init(&rti, rthdr, skb->len);
-            while(!ret)
-            {
-                ret = ieee80211_radiotap_iterator_next(&rti);
-                switch (rti.this_arg_index)
-                {
-                    case IEEE80211_RADIOTAP_FLAGS:
-                        printk(KERN_INFO "      RadioTap Flags: %x\n", *(u8 *)rti.this_arg);
-                        break;
-                    case IEEE80211_RADIOTAP_RATE:
-                        printk(KERN_INFO "       RadioTap Rate: %d (Kbps)\n", (*(u8 *)rti.this_arg * 500));
-                        break;
-                    case IEEE80211_RADIOTAP_CHANNEL:
-                        printk(KERN_INFO "RadioTap Channel Freq: %d\n", *(u16 *)rti.this_arg);
-                        printk(KERN_INFO "RadioTap Channel Flag: %x\n", *(u16 *)(rti.this_arg + 2));
-                        break;
-                    case IEEE80211_RADIOTAP_ANTENNA:
-                        printk(KERN_INFO "    RadioTap Antenna: %d\n", *(u8 *)rti.this_arg);
-                        break;
-                    case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
-                        printk(KERN_INFO "  RadioTap RX Signal: %d\n", *(s8 *)rti.this_arg);
-                        break;
-                    default:
-                        printk(KERN_INFO "      RadioTap Param: %d\n", rti.this_arg_index);
-                        break;
-                } // end switch
-            } // end while
-        } // end if
+        rp++;
+    } // end while
+
+    // Check if forward command was given
+    if( cmd == RULE_CMD_FORWARD )
+    {
+        printk(KERN_INFO "Forwarding...\n");
+        ksendto(sockfd, skb->data, skb->len, 0, (const struct sockaddr *)&addr, sizeof(addr));
     } // end if
+
+    // Free frame
     kfree_skb(skb);
+
+    // Return success
     return(0);
 }
 
@@ -117,16 +74,30 @@ static int __init rtap_init(void)
 
     if (!devname)
     {
-        printk( KERN_ERR "Error: missing remote host IP\n");
-        printk( KERN_ERR "Usage: insmod rtap.ko dev=devname ip=x.x.x.x port=rport\n\n");
+        printk(KERN_ERR "Error: missing remote host IP\n");
+        printk(KERN_ERR "Usage: insmod rtap.ko dev=devname ip=x.x.x.x port=rport\n\n");
         return -ENXIO;
     } // end if
 
     if(!ipaddr)
     {
-        printk( KERN_ERR "Error: missing remote host IP\n");
-        printk( KERN_ERR "Usage: insmod rtap.ko dev=devname ip=x.x.x.x port=rport\n\n");
+        printk(KERN_ERR "Error: missing remote host IP\n");
+        printk(KERN_ERR "Usage: insmod rtap.ko dev=devname ip=x.x.x.x port=rport\n\n");
         return -ENXIO;
+    } // end if
+
+    printk( KERN_INFO "rtap.ko: %s, %s, %d\n", devname, ipaddr, port);
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = inet_addr(ipaddr);;
+    sockfd = ksocket(AF_INET, SOCK_DGRAM, 0);
+    printk(KERN_INFO "sockfd = 0x%p\n", sockfd);
+    if(sockfd == NULL)
+    {
+        printk(KERN_ERR "Cannot create socket\n");
+        return -1;
     } // end if
 
     netdev = first_net_device(&init_net);
@@ -141,7 +112,7 @@ static int __init rtap_init(void)
     if (!netdev)
     {
         printk("Did not find device %s!\n", devname);
-        return -ENXIO;
+        return -1;
     } // end if
 
     rtap_pt.dev = netdev;
@@ -158,6 +129,7 @@ static int __init rtap_init(void)
 static void __exit rtap_exit(void)
 {
     printk( KERN_INFO "RTAP: Unloading module...\n" );
+    kclose(sockfd);
     dev_remove_pack(&rtap_pt);
     printk( KERN_INFO "...done.\n" );
     return;
