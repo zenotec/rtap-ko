@@ -1,9 +1,37 @@
+//*****************************************************************************
+//    Copyright (C) 2014 ZenoTec LLC (http://www.zenotec.net)
+//
+//    This program is free software; you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation; either version 2 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License along
+//    with this program; if not, write to the Free Software Foundation, Inc.,
+//    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//
+//    File: rtap-ko.c
+//    Description: Main module for rtap.ko. Contains top level module
+//                 initialization and parameter parsing.
+//
+//*****************************************************************************
+
+//*****************************************************************************
+// Includes
+//*****************************************************************************
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/stat.h>
 
+#include <linux/types.h>
 #include <linux/version.h>
 
 #include <linux/skbuff.h>
@@ -13,8 +41,8 @@
 #include <linux/netfilter.h>
 
 #include "rtap-ko.h"
-#include "filter.h"
 #include "rule.h"
+#include "filter.h"
 #include "ksocket.h"
 
 /* Module information */
@@ -23,12 +51,12 @@ MODULE_DESCRIPTION( DRIVER_DESC );
 MODULE_LICENSE("GPL");
 
 /* Module parameters */
-static char *devname, *ipaddr;
+static char *dev, *ip;
 static int port = 8888;
-module_param( devname, charp, 0 );
-MODULE_PARM_DESC( devname, "Monitor Interface" );
-module_param( ipaddr, charp, 0 );
-MODULE_PARM_DESC( ipaddr, "Remote listener address" );
+module_param( dev, charp, 0 );
+MODULE_PARM_DESC( dev, "Monitor Interface" );
+module_param( ip, charp, 0 );
+MODULE_PARM_DESC( ip, "Remote listener address" );
 module_param( port, int, 0 );
 MODULE_PARM_DESC( port, "Remote listen port" );
 
@@ -72,29 +100,29 @@ static struct packet_type rtap_pt =
 static int __init rtap_init(void)
 {
 
-    if (!devname)
+    if (!dev)
     {
         printk(KERN_ERR "Error: missing remote host IP\n");
         printk(KERN_ERR "Usage: insmod rtap.ko dev=devname ip=x.x.x.x port=rport\n\n");
         return -ENXIO;
     } // end if
 
-    if(!ipaddr)
+    if (!ip)
     {
         printk(KERN_ERR "Error: missing remote host IP\n");
         printk(KERN_ERR "Usage: insmod rtap.ko dev=devname ip=x.x.x.x port=rport\n\n");
         return -ENXIO;
     } // end if
 
-    printk( KERN_INFO "rtap.ko: %s, %s, %d\n", devname, ipaddr, port);
+    printk( KERN_INFO "rtap.ko: %s, %s, %d\n", dev, ip, port);
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = inet_addr(ipaddr);;
+    addr.sin_addr.s_addr = inet_addr(ip);;
     sockfd = ksocket(AF_INET, SOCK_DGRAM, 0);
     printk(KERN_INFO "sockfd = 0x%p\n", sockfd);
-    if(sockfd == NULL)
+    if (sockfd == NULL)
     {
         printk(KERN_ERR "Cannot create socket\n");
         return -1;
@@ -104,27 +132,29 @@ static int __init rtap_init(void)
     while (netdev)
     {
         printk(KERN_INFO "found [%s]\n", netdev->name);
-        if(!strcmp(netdev->name, devname))
+        if(!strcmp(netdev->name, dev))
+        {
+            printk("Using device %s!\n", dev);
             break;
+        } // end if
         netdev = next_net_device(netdev);
     } // end while
 
     if (!netdev)
     {
-        printk("Did not find device %s!\n", devname);
+        printk("Did not find device %s!\n", dev);
         return -1;
     } // end if
 
     rtap_pt.dev = netdev;
     dev_add_pack(&rtap_pt);
 
-    printk( KERN_INFO "RTAP: Driver registered\n" );
+    printk(KERN_INFO "RTAP: Driver registered\n" );
 
     /* Return ok */
     return( 0 );
 
 }
-
 
 static void __exit rtap_exit(void)
 {
