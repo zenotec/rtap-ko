@@ -31,6 +31,10 @@
 // Function prototypes
 //*****************************************************************************
 
-extern struct net_device *get_devbyname( const char *devname_ );
+int dev_list_init( void );
+int dev_list_exit( void );
+struct net_device* dev_list_add( const char* devname_ );
+struct net_device* dev_list_remove( const char* devname_ );
+int dev_list_clear( void );
 
 #endif
