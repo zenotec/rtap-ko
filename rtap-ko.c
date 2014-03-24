@@ -26,13 +26,8 @@
 //*****************************************************************************
 
 #include <linux/module.h>
-//#include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-//#include <linux/stat.h>
-
-//#include <linux/types.h>
-//#include <linux/version.h>
 
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
@@ -65,7 +60,7 @@ int rtap_func(struct sk_buff *skb, struct net_device *dev,
     // Check if forward command was given
     if( cmd == RULE_CMD_FORWARD )
     {
-        //ksendto(sockfd, skb->data, skb->len, 0, (const struct sockaddr *)&addr, sizeof(addr));
+        ip_list_send( skb );
     } // end if
 
     // Free frame

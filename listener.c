@@ -147,6 +147,22 @@ ip_list_init( void )
     return( 0 );
 }
 
+int ip_list_send( struct sk_buff *skb )
+{
+    listener_t *listener = NULL;
+    listener_t *tmp = NULL;
+
+    spin_lock( &listeners.lock );
+    list_for_each_entry_safe( listener, tmp, &listeners.list, list )
+    {
+        ksendto( listener->sockfd, skb->data, skb->len, 0,
+                 (const struct sockaddr *)&listener->in_addr,
+                 sizeof( listener->in_addr ) );
+    } // end loop 
+    spin_unlock( &listeners.lock );
+
+    return( 0 );
+}
 //*****************************************************************************
 int
 ip_list_exit( void )
