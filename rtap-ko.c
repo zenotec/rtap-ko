@@ -42,6 +42,7 @@
 #include "filter.h"
 #include "device.h"
 #include "listener.h"
+#include "proc.h"
 
 /* Module information */
 MODULE_AUTHOR( DRIVER_AUTHOR );
@@ -78,7 +79,8 @@ static int __init rtap_init(void)
 {
 
     dev_list_init( rtap_func );
-    ip_list_init( rtap_func );
+    ip_list_init();
+    rtap_proc_init();
 
     printk(KERN_INFO "RTAP: Driver registered\n" );
 
@@ -92,6 +94,7 @@ static void __exit rtap_exit(void)
     printk( KERN_INFO "RTAP: Unloading module...\n" );
     ip_list_exit();
     dev_list_exit();
+    rtap_proc_exit();
     printk( KERN_INFO "RTAP: ...done.\n" );
     return;
 }

@@ -25,7 +25,6 @@
 //*****************************************************************************
 
 #include <linux/list.h>
-#include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/if_ether.h>
 #include <linux/net.h>
@@ -53,8 +52,6 @@ typedef struct
 /* Local */
 
 static listener_t listeners = { { 0 } };
-
-static struct proc_dir_entry *proc_devs = NULL;
 
 //*****************************************************************************
 // Functions
@@ -143,11 +140,10 @@ ip_list_clear( void )
 
 //*****************************************************************************
 int
-ip_list_init( void *func )
+ip_list_init( void )
 {
     spin_lock_init( &listeners.lock );
     INIT_LIST_HEAD( &listeners.list );
-    proc_devs = proc_create( "rtap_listeners", 0666, NULL, &ip_proc_fops );
     return( 0 );
 }
 
@@ -155,7 +151,6 @@ ip_list_init( void *func )
 int
 ip_list_exit( void )
 {
-    remove_proc_entry( "rtap_listeners", NULL );
     return( ip_list_clear() );
 }
 

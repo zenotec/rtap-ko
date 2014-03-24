@@ -16,12 +16,21 @@
 //    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 //    File: listener.h
-//    Description: 
+//    Description: Implements the listener proc class. This class provides
+//                 functionality for creating a list of listeners that can
+//                 be set via the Linux proc filesystem.
 //
 //*****************************************************************************
 
 #ifndef __LISTENER_H__
 #define __LISTENER_H__
+
+//*****************************************************************************
+// Includes
+//*****************************************************************************
+
+#include <linux/proc_fs.h>
+#include <linux/skbuff.h>
 
 //*****************************************************************************
 // Type definitions
@@ -37,8 +46,8 @@ extern const struct file_operations ip_proc_fops;
 // Function prototypes
 //*****************************************************************************
 
-extern int ip_list_init( void * );
+extern int ip_list_init( void );
 extern int ip_list_exit( void );
-
+extern int ip_list_send( struct sk_buff *skb );
 
 #endif

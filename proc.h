@@ -15,13 +15,13 @@
 //    with this program; if not, write to the Free Software Foundation, Inc.,
 //    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
-//    File: device.h
-//    Description: 
+//    File: proc.h
+//    Description: Implements the top level proc directory.
 //
 //*****************************************************************************
 
-#ifndef __DEVICE_H__
-#define __DEVICE_H__
+#ifndef __PROC_H__
+#define __PROC_H__
 
 //*****************************************************************************
 // Type definitions
@@ -31,14 +31,11 @@
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations dev_proc_fops;
-
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
-extern int dev_list_init( void *func );
-extern int dev_list_exit( void );
-
+extern int rtap_proc_init( void );
+extern int rtap_proc_exit( void );
 
 #endif

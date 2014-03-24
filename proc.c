@@ -13,32 +13,54 @@
 //
 //    You should have received a copy of the GNU General Public License along
 //    with this program; if not, write to the Free Software Foundation, Inc.,
-//    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//    51 Franklin Street, Fifth Floor, Boston, MA 021100301 USA.
 //
-//    File: device.h
-//    Description: 
+//    File: proc.c
+//    Description: Implements the top level proc filesystem directory for
+//                 all rtap modules that provide proc access.
 //
 //*****************************************************************************
 
-#ifndef __DEVICE_H__
-#define __DEVICE_H__
-
 //*****************************************************************************
-// Type definitions
+// Includes
 //*****************************************************************************
 
+#include <linux/proc_fs.h>
+
+#include "listener.h"
+#include "device.h"
+
 //*****************************************************************************
-// Global variables
+// Variables
 //*****************************************************************************
 
-extern const struct file_operations dev_proc_fops;
+/* Global */
+
+/* Local */
+
+static struct proc_dir_entry *rtap_proc_dir = NULL;
 
 //*****************************************************************************
-// Function prototypes
+// Functions
 //*****************************************************************************
 
-extern int dev_list_init( void *func );
-extern int dev_list_exit( void );
+//*****************************************************************************
+int
+rtap_proc_init( void )
+{
+    rtap_proc_dir = proc_mkdir( "rtap", NULL );
+    proc_create( "devices", 0666, rtap_proc_dir, &dev_proc_fops );
+    proc_create( "listeners", 0666, rtap_proc_dir, &ip_proc_fops );
+    return( 0 );
+}
 
+//*****************************************************************************
+int
+rtap_proc_exit( void )
+{
+    remove_proc_entry( "devices", rtap_proc_dir );
+    remove_proc_entry( "listeners", rtap_proc_dir );
+    remove_proc_entry( "rtap", NULL );
+    return( 0 );
+}
 
-#endif

@@ -50,8 +50,6 @@ typedef struct
 static device_t devices = { { 0 } };
 static void *dev_list_pktfunc = NULL;
 
-static struct proc_dir_entry *proc_devs = NULL;
-
 //*****************************************************************************
 // Functions
 //*****************************************************************************
@@ -172,7 +170,6 @@ dev_list_init( void *func )
 {
     spin_lock_init( &devices.lock );
     INIT_LIST_HEAD( &devices.list );
-    proc_devs = proc_create( "rtap_devs", 0666, NULL, &dev_proc_fops );
     dev_list_pktfunc = func;
     return( 0 );
 }
@@ -181,7 +178,6 @@ dev_list_init( void *func )
 int
 dev_list_exit( void )
 {
-    remove_proc_entry( "rtap_devs", NULL );
     return( dev_list_clear() );
 }
 
