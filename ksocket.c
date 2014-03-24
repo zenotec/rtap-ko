@@ -25,9 +25,11 @@
 // Includes
 //*****************************************************************************
 
+#include <linux/kernel.h>
 #include <linux/socket.h>
 #include <linux/net.h>
 #include <linux/in.h>
+#include <linux/slab.h>
 #include <asm/processor.h>
 #include <asm/uaccess.h>
 
@@ -118,6 +120,31 @@ unsigned int inet_addr( char *ip_ )
     addr[3] = d;
 	
     return( *(unsigned int *)addr );
+}
+
+//*****************************************************************************
+char *inet_ntoa( const struct in_addr *in )
+{
+    char *str_ip = NULL;
+    u_int32_t int_ip = 0;
+	
+    str_ip = kmalloc( 16 * sizeof(char), GFP_KERNEL );
+    if ( ! str_ip )
+    {
+        return( NULL );
+    } // end if
+
+    memset( str_ip, 0, 16 );
+
+    int_ip = in->s_addr;
+	
+    sprintf( str_ip, "%d.%d.%d.%d",
+             (int_ip >>  0) & 0xFF,
+             (int_ip >>  8) & 0xFF,
+             (int_ip >> 16) & 0xFF,
+             (int_ip >> 24) & 0xFF );
+
+    return( str_ip );
 }
 
 

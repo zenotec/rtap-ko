@@ -27,6 +27,7 @@
 #include <linux/netdevice.h>
 #include <linux/list.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #include "device.h"
 
@@ -35,6 +36,7 @@ typedef struct
     struct list_head list;
     spinlock_t lock;
     struct net_device *netdev;
+    struct packet_type pt;
 } device_t;
 
 //*****************************************************************************
@@ -46,38 +48,26 @@ typedef struct
 /* Local */
 
 static device_t devices = { { 0 } };
+static void *dev_list_pktfunc = NULL;
 
 static struct proc_dir_entry *proc_devs = NULL;
-
-static int dev_proc_open( struct inode *inode, struct file *file );
-static int dev_proc_close( struct inode *inode, struct file *file );
-static ssize_t dev_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off );
-static ssize_t dev_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off );
-
-static const struct file_operations proc_fops =
-{
-    .owner      = THIS_MODULE,
-    .open       = dev_proc_open,
-    .release    = dev_proc_close,
-    .read       = dev_proc_read,
-    .write      = dev_proc_write,
-};
 
 //*****************************************************************************
 // Functions
 //*****************************************************************************
 
 //*****************************************************************************
-static struct net_device *get_devbyname( const char *devname_ )
+static struct net_device *
+get_devbyname( const char *devname )
 {
 
     struct net_device *netdev = first_net_device( &init_net );
     while ( netdev )
     {
-        printk( KERN_INFO "found [%s]\n", netdev->name );
-        if( ! strcmp( netdev->name, devname_ ) )
+        printk( KERN_INFO "RTAP: Found dev[%s]\n", netdev->name );
+        if( ! strcmp( netdev->name, devname ) )
         {
-            printk( "Using device %s!\n", devname_ );
+            printk( KERN_INFO "RTAP: Using dev[%s]\n", devname );
             break;
         } // end if
         netdev = next_net_device( netdev );
@@ -88,33 +78,17 @@ static struct net_device *get_devbyname( const char *devname_ )
 }
 
 //*****************************************************************************
-int dev_list_init( void )
-{
-    spin_lock_init( &devices.lock );
-    INIT_LIST_HEAD( &devices.list );
-    proc_devs = create_proc_entry( "rtap_devs", 0644, NULL );
-    proc_devs->proc_fops = &proc_fops;
-    return( 0 );
-}
-
-//*****************************************************************************
-int dev_list_exit( void )
-{
-    remove_proc_entry( "rtap_devs", NULL );
-    return( dev_list_clear() );
-}
-
-//*****************************************************************************
-struct net_device *dev_list_add( const char *devname_ )
+static struct net_device *
+dev_list_add( const char *devname )
 {
     device_t *dev = 0;
     struct net_device *netdev = 0;
 
     // Lookup network device by given name
-    netdev = get_devbyname( devname_ );
+    netdev = get_devbyname( devname );
     if( ! netdev )
     {
-        printk( KERN_ERR "Network device not found: %s", devname_ );
+        printk( KERN_ERR "RTAP: Network device not found: dev[%s]", devname );
         return( 0 );
     } // end if
 
@@ -122,24 +96,30 @@ struct net_device *dev_list_add( const char *devname_ )
     dev = kmalloc( sizeof(device_t), GFP_ATOMIC );
     if( ! dev )
     {
-        printk( KERN_CRIT "Cannot allocate memory: %s", devname_ );
+        printk( KERN_CRIT "RTAP: Cannot allocate memory: dev[%s]", devname );
         return( 0 );
     } // end if
 
     // Populate device list item
     dev->netdev = netdev;
+    dev->pt.type = htons(ETH_P_ALL);
+    dev->pt.func = dev_list_pktfunc;
 
     // Add device list item to tail of device list
     spin_lock( &devices.lock );
     list_add_tail( &dev->list, &devices.list );
     spin_unlock( &devices.lock );
 
+    // Register for packet
+    dev_add_pack( &dev->pt );
+
     // Return non-null network device pointer on success; null on error
     return( netdev );
 }
 
 //*****************************************************************************
-struct net_device *dev_list_remove( const char *devname_ )
+static struct net_device *
+dev_list_remove( const char *devname )
 {
     struct list_head *p = 0;
     struct list_head *n = 0;
@@ -151,9 +131,10 @@ struct net_device *dev_list_remove( const char *devname_ )
     list_for_each_safe( p, n, &devices.list )
     {
         dev = list_entry( p, device_t, list );
-        if( ! strcmp( dev->netdev->name, devname_ ) )
+        if( ! strcmp( dev->netdev->name, devname ) )
         {
             netdev = dev->netdev;
+            dev_remove_pack( &dev->pt );
             list_del( &dev->list );
             kfree( dev );
             break;
@@ -165,15 +146,18 @@ struct net_device *dev_list_remove( const char *devname_ )
     return( netdev );
 }
 
-int dev_list_clear( void )
+//*****************************************************************************
+static int
+dev_list_clear( void )
 {
     device_t *dev = 0;
     device_t *tmp = 0;
 
-     // Remove all devices from list
+    // Remove all devices from list
     spin_lock( &devices.lock );
     list_for_each_entry_safe( dev, tmp, &devices.list, list )
     {
+        dev_remove_pack( &dev->pt );
         list_del( &dev->list );
         kfree( dev );
     } // end loop 
@@ -182,29 +166,108 @@ int dev_list_clear( void )
     return( 0 );
 }
 
-static int dev_proc_open( struct inode *inode, struct file *file )
+//*****************************************************************************
+int
+dev_list_init( void *func )
 {
-    printk( KERN_INFO "RTAP: dev_proc_open()" );
-    try_module_get( THIS_MODULE );
+    spin_lock_init( &devices.lock );
+    INIT_LIST_HEAD( &devices.list );
+    proc_devs = proc_create( "rtap_devs", 0644, NULL, &dev_proc_fops );
+    dev_list_pktfunc = func;
     return( 0 );
 }
 
-static int dev_proc_close( struct inode *inode, struct file *file )
+//*****************************************************************************
+int
+dev_list_exit( void )
 {
-    printk( KERN_INFO "RTAP: dev_proc_close()" );
-    module_put( THIS_MODULE );
+    remove_proc_entry( "rtap_devs", NULL );
+    return( dev_list_clear() );
+}
+
+//*****************************************************************************
+//*****************************************************************************
+static int
+dev_proc_show( struct seq_file *file, void *arg )
+{
+    device_t *dev = 0;
+    device_t *tmp = 0;
+
+    // Iterate over all devices in list
+    spin_lock( &devices.lock );
+    list_for_each_entry_safe( dev, tmp, &devices.list, list )
+    {
+        seq_printf( file, "dev[%s]\n", dev->netdev->name );
+    } // end loop 
+    spin_unlock( &devices.lock );
+
     return( 0 );
 }
 
-static ssize_t dev_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+//*****************************************************************************
+static int
+dev_proc_open( struct inode *inode, struct file *file )
 {
-    printk( KERN_INFO "RTAP: dev_proc_read()" );
-    return( 0 );
+    return( single_open( file, dev_proc_show, NULL ) );
 }
 
-static ssize_t dev_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+//*****************************************************************************
+static int
+dev_proc_close( struct inode *inode, struct file *file )
 {
-    printk( KERN_INFO "RTAP: dev_proc_write()" );
-    return( 0 );
+    return( single_release( inode, file ) );
 }
+
+//*****************************************************************************
+static ssize_t
+dev_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+{
+    return( seq_read( file, buf, cnt, off ) );
+}
+
+//*****************************************************************************
+static loff_t
+dev_proc_lseek( struct file *file, loff_t off, int cnt )
+{
+    return( seq_lseek( file, off, cnt ) );
+}
+
+//*****************************************************************************
+static ssize_t
+dev_proc_write( struct file *file, const char __user *buf, size_t cnt,
+                  loff_t *off )
+{
+    char devname[256] = { 0 };
+    if( ! cnt )
+    {
+        dev_list_clear();
+    } // end if
+    else
+    {
+        copy_from_user( devname, buf, cnt );
+        if( devname[0] == '-' )
+        {
+            dev_list_remove( &devname[1] );
+        } // end if
+        else if( devname[0] == '+' )
+        {
+            dev_list_add( &devname[1] );
+        } // end else
+        else
+        {
+            dev_list_add( devname );
+        } // end else
+    } // end else
+    return( cnt );
+}
+
+const struct file_operations dev_proc_fops =
+{
+    .owner      = THIS_MODULE,
+    .open       = dev_proc_open,
+    .release    = dev_proc_close,
+    .read       = dev_proc_read,
+    .llseek     = dev_proc_lseek,
+    .write      = dev_proc_write,
+};
 

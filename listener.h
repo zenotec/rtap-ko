@@ -15,13 +15,13 @@
 //    with this program; if not, write to the Free Software Foundation, Inc.,
 //    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
-//    File: device.h
+//    File: listener.h
 //    Description: 
 //
 //*****************************************************************************
 
-#ifndef __DEVICE_H__
-#define __DEVICE_H__
+#ifndef __LISTENER_H__
+#define __LISTENER_H__
 
 //*****************************************************************************
 // Type definitions
@@ -31,14 +31,14 @@
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations dev_proc_fops;
+extern const struct file_operations ip_proc_fops;
 
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
-extern int dev_list_init( void * );
-extern int dev_list_exit( void );
+extern int ip_list_init( void * );
+extern int ip_list_exit( void );
 
 
 #endif

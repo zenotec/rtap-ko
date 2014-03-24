@@ -26,45 +26,27 @@
 //*****************************************************************************
 
 #include <linux/module.h>
-#include <linux/moduleparam.h>
+//#include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/stat.h>
+//#include <linux/stat.h>
 
-#include <linux/types.h>
-#include <linux/version.h>
+//#include <linux/types.h>
+//#include <linux/version.h>
 
 #include <linux/skbuff.h>
-#include <linux/if_ether.h>
-#include <linux/byteorder/generic.h>
 #include <linux/netdevice.h>
-#include <linux/netfilter.h>
 
 #include "rtap-ko.h"
 #include "rule.h"
 #include "filter.h"
-#include "ksocket.h"
 #include "device.h"
+#include "listener.h"
 
 /* Module information */
 MODULE_AUTHOR( DRIVER_AUTHOR );
 MODULE_DESCRIPTION( DRIVER_DESC );
 MODULE_LICENSE("GPL");
-
-/* Module parameters */
-static char *dev = "mon0";
-static char *ip = "127.0.0.1";
-static int port = 8888;
-module_param( dev, charp, 0 );
-MODULE_PARM_DESC( dev, "Monitor Interface" );
-module_param( ip, charp, 0 );
-MODULE_PARM_DESC( ip, "Remote listener address" );
-module_param( port, int, 0 );
-MODULE_PARM_DESC( port, "Remote listen port" );
-
-static struct net_device *netdev = 0;
-static ksocket_t sockfd;
-static struct sockaddr_in addr;
 
 int rtap_func(struct sk_buff *skb, struct net_device *dev,
               struct packet_type *pt, struct net_device *orig_dev)
@@ -82,7 +64,7 @@ int rtap_func(struct sk_buff *skb, struct net_device *dev,
     // Check if forward command was given
     if( cmd == RULE_CMD_FORWARD )
     {
-        ksendto(sockfd, skb->data, skb->len, 0, (const struct sockaddr *)&addr, sizeof(addr));
+        //ksendto(sockfd, skb->data, skb->len, 0, (const struct sockaddr *)&addr, sizeof(addr));
     } // end if
 
     // Free frame
@@ -92,50 +74,11 @@ int rtap_func(struct sk_buff *skb, struct net_device *dev,
     return(0);
 }
 
-static struct packet_type rtap_pt =
-{
-    .type = __constant_htons(ETH_P_ALL),
-    .func = rtap_func,
-};
-
 static int __init rtap_init(void)
 {
 
-    printk( KERN_INFO "RTAP: rtap.ko( %s, %s, %d )\n", dev, ip, port );
-
-    dev_list_init();
-
-    memset( &addr, 0, sizeof( addr ) );
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons( port );
-    addr.sin_addr.s_addr = inet_addr( ip );
-    sockfd = ksocket( AF_INET, SOCK_DGRAM, 0 );
-    if( sockfd == NULL )
-    {
-        printk( KERN_ERR "RTAP: Cannot create socket\n" );
-        return( -1 );
-    } // end if
-
-    netdev = first_net_device( &init_net );
-    while( netdev )
-    {
-        printk( KERN_INFO "RTAP: Found dev[%s]\n", netdev->name );
-        if( ! strcmp( netdev->name, dev ) )
-        {
-            printk( KERN_INFO "RTAP: Using dev[%s]\n", dev );
-            break;
-        } // end if
-        netdev = next_net_device( netdev );
-    } // end while
-
-    if (!netdev)
-    {
-        printk( KERN_ERR "Did not find device %s!\n", dev );
-        return( -1 );
-    } // end if
-
-    rtap_pt.dev = netdev;
-    //dev_add_pack(&rtap_pt);
+    dev_list_init( rtap_func );
+    ip_list_init( rtap_func );
 
     printk(KERN_INFO "RTAP: Driver registered\n" );
 
@@ -147,9 +90,8 @@ static int __init rtap_init(void)
 static void __exit rtap_exit(void)
 {
     printk( KERN_INFO "RTAP: Unloading module...\n" );
+    ip_list_exit();
     dev_list_exit();
-    kclose( sockfd );
-    //dev_remove_pack(&rtap_pt);
     printk( KERN_INFO "RTAP: ...done.\n" );
     return;
 }
