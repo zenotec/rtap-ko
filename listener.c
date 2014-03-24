@@ -28,6 +28,9 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/if_ether.h>
+#include <linux/net.h>
+#include <linux/in.h>
+#include <net/sock.h>
 #include <linux/byteorder/generic.h>
 
 #include "listener.h"
@@ -99,15 +102,13 @@ ip_list_remove( const char *ipaddr )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
-    char *ipstr = 0;
     int ret = -1;
 
     // Search for listener in list and remove
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
-        ipstr = inet( listener->ipaddr )
-        if( ! strcmp( str, ipaddr ) )
+        if( ! listener->in_addr.sin_addr.s_addr == inet_addr( ipaddr ) )
         {
             list_del( &listener->list );
             kfree( listener );
@@ -146,7 +147,7 @@ ip_list_init( void *func )
 {
     spin_lock_init( &listeners.lock );
     INIT_LIST_HEAD( &listeners.list );
-    proc_devs = proc_create( "rtap_listener", 0644, NULL, &ip_proc_fops );
+    proc_devs = proc_create( "rtap_listeners", 0666, NULL, &ip_proc_fops );
     return( 0 );
 }
 
@@ -154,7 +155,7 @@ ip_list_init( void *func )
 int
 ip_list_exit( void )
 {
-    remove_proc_entry( "rtap_devs", NULL );
+    remove_proc_entry( "rtap_listeners", NULL );
     return( ip_list_clear() );
 }
 
@@ -165,12 +166,15 @@ ip_proc_show( struct seq_file *file, void *arg )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
+    char *ipaddr = NULL;
 
     // Iterate over all listeners in list
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
-        //seq_printf( file, "%s\n", l->name );
+        ipaddr = inet_ntoa( &listener->in_addr.sin_addr );
+        seq_printf( file, "%s\n", ipaddr );
+        kfree( ipaddr );
     } // end loop 
     spin_unlock( &listeners.lock );
 

@@ -108,7 +108,7 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
 }
 
 //*****************************************************************************
-unsigned int inet_addr( char *ip_ )
+unsigned int inet_addr( const char *ip_ )
 {
     int a, b, c, d;
     char addr[4];

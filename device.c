@@ -172,7 +172,7 @@ dev_list_init( void *func )
 {
     spin_lock_init( &devices.lock );
     INIT_LIST_HEAD( &devices.list );
-    proc_devs = proc_create( "rtap_devs", 0644, NULL, &dev_proc_fops );
+    proc_devs = proc_create( "rtap_devs", 0666, NULL, &dev_proc_fops );
     dev_list_pktfunc = func;
     return( 0 );
 }

@@ -39,7 +39,7 @@ ksocket_t ksocket( int domain, int type, int protocol );
 int kclose( ksocket_t socket );
 ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
                    const struct sockaddr *dest_addr, int dest_len );
-unsigned int inet_addr( char *ip );
-char *inet_ntoa( const struct in_addr *in ); /* DO NOT forget to kfree the return pointer */
+unsigned int inet_addr( const char *ip );
+char *inet_ntoa( const struct in_addr *in );
 
 #endif
