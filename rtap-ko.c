@@ -77,7 +77,7 @@ static int __init rtap_init(void)
     ip_list_init();
     rtap_proc_init();
 
-    printk(KERN_INFO "RTAP: Driver registered\n" );
+    printk(KERN_INFO "RTAP: Driver registered (%s)\n", DRIVER_VERSION );
 
     /* Return ok */
     return( 0 );
