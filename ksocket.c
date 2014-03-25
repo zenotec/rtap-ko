@@ -136,7 +136,7 @@ char *inet_ntoa( const struct in_addr *in )
 
     memset( str_ip, 0, 16 );
 
-    int_ip = in->s_addr;
+    int_ip = ntohl( in->s_addr );
 	
     sprintf( str_ip, "%d.%d.%d.%d",
              (int_ip >>  0) & 0xFF,

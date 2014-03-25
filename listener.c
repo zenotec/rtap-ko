@@ -75,7 +75,7 @@ ip_list_add( const char *ipaddr )
     memset( &listener->in_addr, 0, sizeof( listener->in_addr ) );
     listener->in_addr.sin_family = AF_INET;
     listener->in_addr.sin_port = htons( 8888 );
-    listener->in_addr.sin_addr.s_addr = inet_addr( ipaddr );
+    listener->in_addr.sin_addr.s_addr = htonl( inet_addr( ipaddr ) );
     listener->sockfd = ksocket( AF_INET, SOCK_DGRAM, 0 );
     if( listener->sockfd == NULL )
     {
@@ -105,7 +105,7 @@ ip_list_remove( const char *ipaddr )
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
-        if( ! listener->in_addr.sin_addr.s_addr == inet_addr( ipaddr ) )
+        if( ! listener->in_addr.sin_addr.s_addr == htonl( inet_addr( ipaddr ) ) )
         {
             list_del( &listener->list );
             kfree( listener );
