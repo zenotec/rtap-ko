@@ -86,7 +86,7 @@ dev_list_add( const char *devname )
     netdev = get_devbyname( devname );
     if( ! netdev )
     {
-        printk( KERN_ERR "RTAP: Network device not found: dev[%s]", devname );
+        printk( KERN_ERR "RTAP: Network device not found: dev[%s]\n", devname );
         return( 0 );
     } // end if
 
@@ -94,7 +94,7 @@ dev_list_add( const char *devname )
     dev = kmalloc( sizeof(device_t), GFP_ATOMIC );
     if( ! dev )
     {
-        printk( KERN_CRIT "RTAP: Cannot allocate memory: dev[%s]", devname );
+        printk( KERN_CRIT "RTAP: Cannot allocate memory: dev[%s]\n", devname );
         return( 0 );
     } // end if
 

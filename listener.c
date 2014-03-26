@@ -68,7 +68,7 @@ ip_list_add( const char *ipaddr )
     listener = kmalloc( sizeof( listener_t ), GFP_ATOMIC );
     if( ! listener )
     {
-        printk( KERN_CRIT "RTAP: Cannot allocate memory: %s", ipaddr );
+        printk( KERN_CRIT "RTAP: Cannot allocate memory: %s\n", ipaddr );
         return( -1 );
     } // end if
 
@@ -89,7 +89,7 @@ ip_list_add( const char *ipaddr )
     listener->ipaddr = inet_ntoa( listener->in_addr.sin_addr ); 
     if( ! listener->ipaddr )
     {
-        printk( KERN_CRIT "RTAP: Cannot allocate memory: %s", ipaddr );
+        printk( KERN_CRIT "RTAP: Cannot allocate memory: %s\n", ipaddr );
         kfree( listener );
         return( -1 );
     } // end if

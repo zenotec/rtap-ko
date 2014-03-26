@@ -61,7 +61,7 @@ int rtap_func(struct sk_buff *skb, struct net_device *dev,
         unsigned char *p = skb->data;
         for( i = 0; i < skb->len; i+=8 )
         {
-            printk( KERN_INFO "RTAP: skb: %02x %02x %02x %02x %02x %02x %02x %02x",
+            printk( KERN_INFO "RTAP: skb: %02x %02x %02x %02x %02x %02x %02x %02x\n",
                     p[i+0], p[i+1], p[i+2], p[i+3], p[i+4], p[i+5], p[i+6], p[i+7] );
         }
     }
