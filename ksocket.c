@@ -126,7 +126,7 @@ unsigned int inet_addr( const char *ip_ )
 char *inet_ntoa( const struct in_addr *in )
 {
     char *str_ip = NULL;
-    u_int32_t int_ip = 0;
+    uint8_t int_ip[4] = 0;
 	
     str_ip = kmalloc( 16 * sizeof(char), GFP_KERNEL );
     if ( ! str_ip )
@@ -136,7 +136,7 @@ char *inet_ntoa( const struct in_addr *in )
 
     memset( str_ip, 0, 16 );
 
-    int_ip = ntohl( in->s_addr );
+    int_ip = in->s_addr;
 	
     sprintf( str_ip, "%d.%d.%d.%d",
              (int_ip >>  0) & 0xFF,
