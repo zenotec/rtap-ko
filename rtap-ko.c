@@ -48,9 +48,12 @@ int rtap_func(struct sk_buff *skb, struct net_device *dev,
               struct packet_type *pt, struct net_device *orig_dev)
 {
 
+    static int cnt = 50;
     rule_t *rp = &ruletbl[0];
     rule_cmd_t cmd = RULE_CMD_NONE;
 
+    if( cnt-- )
+    {
     // Run all rules on frame until drop/forward is returned
     while( rp->func && (cmd = rp->func( rp->id, rp->cmd, skb->data, rp->val )) == RULE_CMD_NONE )
     {
@@ -62,6 +65,7 @@ int rtap_func(struct sk_buff *skb, struct net_device *dev,
     {
         ip_list_send( skb );
     } // end if
+    }
 
     // Free frame
     kfree_skb(skb);

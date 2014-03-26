@@ -39,6 +39,7 @@ typedef struct
 {
     struct list_head list;
     spinlock_t lock;
+    char *ipaddr;
     struct sockaddr_in in_addr;
     ksocket_t sockfd;
 } listener_t;
@@ -71,7 +72,7 @@ ip_list_add( const char *ipaddr )
         return( -1 );
     } // end if
 
-    // Convert ip string to socket address
+    // Convert IP string to socket address
     memset( &listener->in_addr, 0, sizeof( listener->in_addr ) );
     listener->in_addr.sin_family = AF_INET;
     listener->in_addr.sin_port = htons( 8888 );
@@ -80,6 +81,15 @@ ip_list_add( const char *ipaddr )
     if( listener->sockfd == NULL )
     {
         printk( KERN_ERR "RTAP: Cannot create socket\n" );
+        kfree( listener );
+        return( -1 );
+    } // end if
+
+    // Save IP string
+    listener->ipaddr = inet_ntoa( &listener->in_addr.sin_addr ); 
+    if( ! listener->ipaddr )
+    {
+        printk( KERN_CRIT "RTAP: Cannot allocate memory: %s", ipaddr );
         kfree( listener );
         return( -1 );
     } // end if
@@ -105,9 +115,11 @@ ip_list_remove( const char *ipaddr )
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
-        if( ! listener->in_addr.sin_addr.s_addr == htonl( inet_addr( ipaddr ) ) )
+        if( ! strcmp( listener->ipaddr, ipaddr ) )
         {
+            printk( KERN_INFO "RTAP: Removing listener: %s\n", listener->ipaddr );
             list_del( &listener->list );
+            kfree( listener->ipaddr );
             kfree( listener );
             ret = 0;
             break;
@@ -130,7 +142,9 @@ ip_list_clear( void )
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
+        printk( KERN_INFO "RTAP: Removing listener: %s\n", listener->ipaddr );
         list_del( &listener->list );
+        kfree( listener->ipaddr );
         kfree( listener );
     } // end loop 
     spin_unlock( &listeners.lock );
@@ -177,15 +191,12 @@ ip_proc_show( struct seq_file *file, void *arg )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
-    char *ipaddr = NULL;
 
     // Iterate over all listeners in list
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
-        ipaddr = inet_ntoa( &listener->in_addr.sin_addr );
-        seq_printf( file, "%s\n", ipaddr );
-        kfree( ipaddr );
+        seq_printf( file, "%s\n", listener->ipaddr );
     } // end loop 
     spin_unlock( &listeners.lock );
 

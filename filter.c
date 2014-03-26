@@ -65,24 +65,31 @@ rule_cmd_t rtap_filter_80211_mac( rule_id_t id, rule_cmd_t cmd, void *buf, void 
     switch( id )
     {
         case RULE_ID_MAC_SA:
-            printk(KERN_INFO "RTAP: SA: %x:%x:%x\n", ((uint8_t *)val)[0], ((uint8_t *)val)[1], ((uint8_t *)val)[2]);
+            printk( KERN_INFO "RTAP: SA(exp): %x:%x:%x:%x:%x:%x\n",
+                     ((uint8_t *)val)[0], ((uint8_t *)val)[1], ((uint8_t *)val)[2],
+                     ((uint8_t *)val)[3], ((uint8_t *)val)[4], ((uint8_t *)val)[5] );
+            printk(KERN_INFO "RTAP: SA(obs): %x:%x:%x\n", fhdr->addr2[0], fhdr->addr2[1], fhdr->addr2[2]);
             if( !memcmp(fhdr->addr2, val, sizeof(fhdr->addr2)) )
             {
                 ret_cmd = cmd;
             } // end if
             break;
         case RULE_ID_MAC_DA:
-            printk(KERN_INFO "RTAP: DA: %x:%x:%x\n", ((uint8_t *)val)[0], ((uint8_t *)val)[1], ((uint8_t *)val)[2]);
+            printk(KERN_INFO "RTAP: DA(exp): %x:%x:%x:%x:%x:%x\n",
+                     ((uint8_t *)val)[0], ((uint8_t *)val)[1], ((uint8_t *)val)[2],
+                     ((uint8_t *)val)[3], ((uint8_t *)val)[4], ((uint8_t *)val)[5]);
+            printk(KERN_INFO "RTAP: DA(obs): %x:%x:%x\n", fhdr->addr1[0], fhdr->addr1[1], fhdr->addr1[2]);
             if( !memcmp(fhdr->addr1, val, sizeof(fhdr->addr1)) )
             {
                 ret_cmd = cmd;
             } // end if
             break;
         case RULE_ID_MAC_FCTL:
+            printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", *(uint16_t *)val);
+            printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
             if( cpu_to_le16(fhdr->frame_control) == *(uint16_t *)val )
             {
                 ret_cmd = cmd;
-                printk(KERN_INFO "RTAP: FCTL: 0x%04x\n", *(uint16_t *)val);
             } // end if
             break;
         default:

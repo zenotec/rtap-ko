@@ -126,23 +126,15 @@ unsigned int inet_addr( const char *ip_ )
 char *inet_ntoa( const struct in_addr *in )
 {
     char *str_ip = NULL;
-    uint8_t int_ip[4] = 0;
+    uint8_t *int_ip = NULL;
 	
     str_ip = kmalloc( 16 * sizeof(char), GFP_KERNEL );
-    if ( ! str_ip )
+    if ( str_ip != NULL )
     {
-        return( NULL );
+        memset( str_ip, 0, 16 );
+        int_ip = (uint8_t *)&in->s_addr;
+        sprintf( str_ip, "%d.%d.%d.%d", int_ip[3], int_ip[2], int_ip[1], int_ip[0] );
     } // end if
-
-    memset( str_ip, 0, 16 );
-
-    int_ip = in->s_addr;
-	
-    sprintf( str_ip, "%d.%d.%d.%d",
-             (int_ip >>  0) & 0xFF,
-             (int_ip >>  8) & 0xFF,
-             (int_ip >> 16) & 0xFF,
-             (int_ip >> 24) & 0xFF );
 
     return( str_ip );
 }

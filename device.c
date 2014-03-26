@@ -116,32 +116,31 @@ dev_list_add( const char *devname )
 }
 
 //*****************************************************************************
-static struct net_device *
+static int
 dev_list_remove( const char *devname )
 {
-    struct list_head *p = 0;
-    struct list_head *n = 0;
     device_t *dev = 0;
-    struct net_device *netdev = 0;
+    device_t *tmp = 0;
+    int ret = -1;
 
     // Search for device in list and remove
     spin_lock( &devices.lock );
-    list_for_each_safe( p, n, &devices.list )
+    list_for_each_entry_safe( dev, tmp, &devices.list, list )
     {
-        dev = list_entry( p, device_t, list );
         if( ! strcmp( dev->netdev->name, devname ) )
         {
-            netdev = dev->netdev;
+            printk( KERN_INFO "RTAP: Removing device: %s\n", dev->netdev->name );
             dev_remove_pack( &dev->pt );
             list_del( &dev->list );
             kfree( dev );
+            ret = 0;
             break;
         } // end if
     } // end loop 
     spin_unlock( &devices.lock );
 
     // Return non-null network device pointer on success; null on error
-    return( netdev );
+    return( ret );
 }
 
 //*****************************************************************************
@@ -155,6 +154,7 @@ dev_list_clear( void )
     spin_lock( &devices.lock );
     list_for_each_entry_safe( dev, tmp, &devices.list, list )
     {
+        printk( KERN_INFO "RTAP: Removing device: %s\n", dev->netdev->name );
         dev_remove_pack( &dev->pt );
         list_del( &dev->list );
         kfree( dev );
