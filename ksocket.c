@@ -108,35 +108,58 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
 }
 
 //*****************************************************************************
-unsigned int inet_addr( const char *ip_ )
+int inet_aton( const char *cp, struct in_addr *inp )
 {
+
     int a, b, c, d;
-    char addr[4];
-	
-    sscanf( ip_, "%d.%d.%d.%d", &a, &b, &c, &d );
-    addr[0] = a;
-    addr[1] = b;
-    addr[2] = c;
-    addr[3] = d;
-	
-    return( *(unsigned int *)addr );
+    __be32 addr;
+
+    if( cp == NULL )
+    {
+        return( 0 );
+    } // end if
+
+    sscanf( cp, "%d.%d.%d.%d", &a, &b, &c, &d );
+
+    addr = a;
+    addr <<= 8;
+    addr |= b;
+    addr <<= 8;
+    addr |= c;
+    addr <<= 8;
+    addr |= d;    
+
+    if( inp )
+    {
+        inp->s_addr = htonl( addr );
+    } // end if
+
+    return( 1 );
+
 }
 
 //*****************************************************************************
-char *inet_ntoa( const struct in_addr *in )
+const char *inet_ntoa( struct in_addr in )
 {
-    char *str_ip = NULL;
-    uint8_t *int_ip = NULL;
-	
-    str_ip = kmalloc( 16 * sizeof(char), GFP_KERNEL );
-    if ( str_ip != NULL )
+    char *ip = NULL;
+    uint32_t addr = ntohl( in.s_addr );
+    int a, b, c, d;
+
+    ip = kmalloc( 16 * sizeof(char), GFP_KERNEL );
+    if ( ip != NULL )
     {
-        memset( str_ip, 0, 16 );
-        int_ip = (uint8_t *)&in->s_addr;
-        sprintf( str_ip, "%d.%d.%d.%d", int_ip[3], int_ip[2], int_ip[1], int_ip[0] );
+        memset( ip, 0, 16 );
+        d = (addr & 0xff);
+        addr >>= 8;
+        c = (addr & 0xff);
+        addr >>= 8;
+        b = (addr & 0xff);
+        addr >>= 8;
+        a = (addr & 0xff);
+        sprintf( ip, "%d.%d.%d.%d", a, b, c, d );
     } // end if
 
-    return( str_ip );
+    return( ip );
 }
 
 

@@ -44,16 +44,18 @@ MODULE_AUTHOR( DRIVER_AUTHOR );
 MODULE_DESCRIPTION( DRIVER_DESC );
 MODULE_LICENSE("GPL");
 
+static int cnt = 50;
+
 int rtap_func(struct sk_buff *skb, struct net_device *dev,
               struct packet_type *pt, struct net_device *orig_dev)
 {
 
-    static int cnt = 50;
     rule_t *rp = &ruletbl[0];
     rule_cmd_t cmd = RULE_CMD_NONE;
 
-    if( cnt-- )
+    if( cnt )
     {
+    cnt--;
     // Run all rules on frame until drop/forward is returned
     while( rp->func && (cmd = rp->func( rp->id, rp->cmd, skb->data, rp->val )) == RULE_CMD_NONE )
     {
@@ -91,10 +93,13 @@ static int __init rtap_init(void)
 static void __exit rtap_exit(void)
 {
     printk( KERN_INFO "RTAP: Unloading module...\n" );
-    ip_list_exit();
+
     dev_list_exit();
+    ip_list_exit();
     rtap_proc_exit();
+
     printk( KERN_INFO "RTAP: ...done.\n" );
+
     return;
 }
 

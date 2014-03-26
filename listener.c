@@ -39,7 +39,7 @@ typedef struct
 {
     struct list_head list;
     spinlock_t lock;
-    char *ipaddr;
+    const char *ipaddr;
     struct sockaddr_in in_addr;
     ksocket_t sockfd;
 } listener_t;
@@ -76,7 +76,7 @@ ip_list_add( const char *ipaddr )
     memset( &listener->in_addr, 0, sizeof( listener->in_addr ) );
     listener->in_addr.sin_family = AF_INET;
     listener->in_addr.sin_port = htons( 8888 );
-    listener->in_addr.sin_addr.s_addr = htonl( inet_addr( ipaddr ) );
+    inet_aton( ipaddr, &listener->in_addr.sin_addr );
     listener->sockfd = ksocket( AF_INET, SOCK_DGRAM, 0 );
     if( listener->sockfd == NULL )
     {
@@ -86,7 +86,7 @@ ip_list_add( const char *ipaddr )
     } // end if
 
     // Save IP string
-    listener->ipaddr = inet_ntoa( &listener->in_addr.sin_addr ); 
+    listener->ipaddr = inet_ntoa( listener->in_addr.sin_addr ); 
     if( ! listener->ipaddr )
     {
         printk( KERN_CRIT "RTAP: Cannot allocate memory: %s", ipaddr );
