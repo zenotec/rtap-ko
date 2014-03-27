@@ -44,31 +44,16 @@ MODULE_AUTHOR( DRIVER_AUTHOR );
 MODULE_DESCRIPTION( DRIVER_DESC );
 MODULE_LICENSE("GPL");
 
-static int cnt = 50;
-
-int rtap_func(struct sk_buff *skb, struct net_device *dev,
-              struct packet_type *pt, struct net_device *orig_dev)
+int
+rtap_func( struct sk_buff *skb, struct net_device *dev,
+           struct packet_type *pt, struct net_device *orig_dev )
 {
 
     rule_t *rp = &ruletbl[0];
     rule_cmd_t cmd = RULE_CMD_NONE;
 
-    if( cnt )
-    {
-        cnt--;
-        printk( KERN_INFO "RTAP: skb->data: %p (%d)\n", skb->data, skb->len );
-        {
-            int i;
-            unsigned char *p = skb->data;
-            for( i = 0; i < skb->len; i+=8 )
-            {
-                printk( KERN_INFO "RTAP: skb: %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                        p[i+0], p[i+1], p[i+2], p[i+3], p[i+4], p[i+5], p[i+6], p[i+7] );
-            }
-        }
-
     // Run all rules on frame until drop/forward is returned
-    while( rp->func && (cmd = rp->func( rp->id, rp->cmd, skb->data, rp->val )) == RULE_CMD_NONE )
+    while( rp->func && ( cmd = rp->func( rp->id, rp->cmd, skb->data, rp->val ) ) == RULE_CMD_NONE )
     {
         rp++;
     } // end while
@@ -79,30 +64,30 @@ int rtap_func(struct sk_buff *skb, struct net_device *dev,
         ip_list_send( skb );
     } // end if
 
-    }
-
     // Free frame
-    kfree_skb(skb);
+    kfree_skb( skb );
 
     // Return success
-    return(0);
+    return( 0 );
 }
 
-static int __init rtap_init(void)
+static int __init
+rtap_init( void )
 {
 
     dev_list_init( rtap_func );
     ip_list_init();
     rtap_proc_init();
 
-    printk(KERN_INFO "RTAP: Driver registered (%s)\n", DRIVER_VERSION );
+    printk( KERN_INFO "RTAP: Driver registered (%s)\n", DRIVER_VERSION );
 
     /* Return ok */
     return( 0 );
 
 }
 
-static void __exit rtap_exit(void)
+static void __exit
+rtap_exit( void )
 {
     printk( KERN_INFO "RTAP: Unloading module...\n" );
 
