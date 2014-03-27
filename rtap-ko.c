@@ -56,6 +56,7 @@ int rtap_func(struct sk_buff *skb, struct net_device *dev,
     if( cnt )
     {
         cnt--;
+        printk( KERN_INFO "RTAP: skb->data: %p (%d)\n", skb->data, skb->len );
         {
             int i;
             unsigned char *p = skb->data;
