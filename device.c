@@ -62,10 +62,9 @@ get_devbyname( const char *devname )
     struct net_device *netdev = first_net_device( &init_net );
     while ( netdev )
     {
-        printk( KERN_INFO "RTAP: Found dev[%s]\n", netdev->name );
         if( ! strcmp( netdev->name, devname ) )
         {
-            printk( KERN_INFO "RTAP: Using dev[%s]\n", devname );
+            printk( KERN_INFO "RTAP: Found device: %s\n", netdev->name );
             break;
         } // end if
         netdev = next_net_device( netdev );
@@ -86,7 +85,7 @@ dev_list_add( const char *devname )
     netdev = get_devbyname( devname );
     if( ! netdev )
     {
-        printk( KERN_ERR "RTAP: Network device not found: dev[%s]\n", devname );
+        printk( KERN_ERR "RTAP: Device '%s' not found\n", devname );
         return( 0 );
     } // end if
 
@@ -97,6 +96,7 @@ dev_list_add( const char *devname )
         printk( KERN_CRIT "RTAP: Cannot allocate memory: dev[%s]\n", devname );
         return( 0 );
     } // end if
+    memset( (void *)dev, 0, sizeof( device_t ) );
 
     // Populate device list item
     dev->netdev = netdev;
@@ -230,16 +230,16 @@ dev_proc_lseek( struct file *file, loff_t off, int cnt )
 
 //*****************************************************************************
 static ssize_t
-dev_proc_write( struct file *file, const char __user *buf, size_t cnt,
-                  loff_t *off )
+dev_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
-    char devname[256] = { 0 };
+    char devname[256+1] = { 0 };
     if( ! cnt )
     {
         dev_list_clear();
     } // end if
     else
     {
+        cnt = (cnt >= 256) ? 256 : cnt;
         copy_from_user( devname, buf, cnt );
         if( devname[0] == '-' )
         {
@@ -257,6 +257,8 @@ dev_proc_write( struct file *file, const char __user *buf, size_t cnt,
     return( cnt );
 }
 
+//*****************************************************************************
+//*****************************************************************************
 const struct file_operations dev_proc_fops =
 {
     .owner      = THIS_MODULE,

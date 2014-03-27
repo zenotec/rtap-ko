@@ -71,6 +71,7 @@ ip_list_add( const char *ipaddr )
         printk( KERN_CRIT "RTAP: Cannot allocate memory: %s\n", ipaddr );
         return( -1 );
     } // end if
+    memset( (void *)listener, 0, sizeof( listener_t ) );
 
     // Convert IP string to socket address
     memset( &listener->in_addr, 0, sizeof( listener->in_addr ) );
@@ -161,7 +162,9 @@ ip_list_init( void )
     return( 0 );
 }
 
-int ip_list_send( struct sk_buff *skb )
+//*****************************************************************************
+int
+ip_list_send( struct sk_buff *skb )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
@@ -233,16 +236,16 @@ ip_proc_lseek( struct file *file, loff_t off, int cnt )
 
 //*****************************************************************************
 static ssize_t
-ip_proc_write( struct file *file, const char __user *buf, size_t cnt,
-                  loff_t *off )
+ip_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
-    char ipaddr[256] = { 0 };
+    char ipaddr[256+1] = { 0 };
     if( ! cnt )
     {
         ip_list_clear();
     } // end if
     else
     {
+        cnt = (cnt >= 256) ? 256 : cnt;
         copy_from_user( ipaddr, buf, cnt );
         if( ipaddr[0] == '-' )
         {
@@ -260,6 +263,8 @@ ip_proc_write( struct file *file, const char __user *buf, size_t cnt,
     return( cnt );
 }
 
+//*****************************************************************************
+//*****************************************************************************
 const struct file_operations ip_proc_fops =
 {
     .owner      = THIS_MODULE,

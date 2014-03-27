@@ -37,13 +37,15 @@
 //*****************************************************************************
 
 //*****************************************************************************
-rule_cmd_t rtap_filter_drop(rule_id_t id, rule_cmd_t cmd, void *buf, void *val)
+rule_cmd_t
+rtap_filter_drop(rule_id_t id, rule_cmd_t cmd, void *buf, void *val)
 {
     return(RULE_CMD_DROP);
 }
 
 //*****************************************************************************
-rule_cmd_t rtap_filter_radiotap(rule_id_t id, rule_cmd_t cmd, void *buf, void *val)
+rule_cmd_t
+rtap_filter_radiotap(rule_id_t id, rule_cmd_t cmd, void *buf, void *val)
 {
     rule_cmd_t ret_cmd = RULE_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr = 0;
@@ -57,7 +59,8 @@ rule_cmd_t rtap_filter_radiotap(rule_id_t id, rule_cmd_t cmd, void *buf, void *v
 }
 
 //*****************************************************************************
-rule_cmd_t rtap_filter_80211_mac( rule_id_t id, rule_cmd_t cmd, void *buf, void *val )
+rule_cmd_t
+rtap_filter_80211_mac( rule_id_t id, rule_cmd_t cmd, void *buf, void *val )
 {
     rule_cmd_t ret_cmd = RULE_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)buf;
