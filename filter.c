@@ -64,8 +64,8 @@ rtap_filter_80211_mac( rule_id_t id, rule_cmd_t cmd, void *buf, void *val )
 {
     rule_cmd_t ret_cmd = RULE_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)buf;
-    struct ieee80211_hdr *fhdr = (struct ieee80211_hdr *)((uint8_t *)rthdr + rthdr->it_len);
-    printk( KERN_INFO "RTAP: rthdr: %p (%d)\n", rthdr, rthdr->it_len );
+    struct ieee80211_hdr *fhdr = (struct ieee80211_hdr *)((uint8_t *)rthdr + cpu_to_le16( rthdr->it_len ) );
+    printk( KERN_INFO "RTAP: rthdr: %p (%d)\n", rthdr, cpu_to_le16( rthdr->it_len ) );
     printk( KERN_INFO "RTAP: fhdr: %p\n", fhdr );
     switch( id )
     {
