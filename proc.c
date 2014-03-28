@@ -29,6 +29,8 @@
 
 #include "listener.h"
 #include "device.h"
+#include "rule.h"
+#include "filter.h"
 
 //*****************************************************************************
 // Variables
@@ -51,6 +53,7 @@ rtap_proc_init( void )
     rtap_proc_dir = proc_mkdir( "rtap", NULL );
     proc_create( "devices", 0666, rtap_proc_dir, &dev_proc_fops );
     proc_create( "listeners", 0666, rtap_proc_dir, &ip_proc_fops );
+    proc_create( "filters", 0666, rtap_proc_dir, &fltr_proc_fops );
     return( 0 );
 }
 
@@ -60,6 +63,7 @@ rtap_proc_exit( void )
 {
     remove_proc_entry( "devices", rtap_proc_dir );
     remove_proc_entry( "listeners", rtap_proc_dir );
+    remove_proc_entry( "filters", rtap_proc_dir );
     remove_proc_entry( "rtap", NULL );
     return( 0 );
 }

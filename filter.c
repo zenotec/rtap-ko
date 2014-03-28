@@ -24,30 +24,89 @@
 // Includes
 //*****************************************************************************
 
+#include <linux/list.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/ieee80211.h>
 #include <net/mac80211.h>
 #include <net/ieee80211_radiotap.h>
 
 #include "rtap-ko.h"
+#include "device.h"
+#include "listener.h"
 #include "rule.h"
 #include "filter.h"
+
+//*****************************************************************************
+// Type definitions
+//*****************************************************************************
+
+typedef struct
+{
+    struct list_head list;
+    spinlock_t lock;
+} filter_t;
+
+//*****************************************************************************
+// Variables
+//*****************************************************************************
+
+/* Global */
+
+/* Local */
+
+static filter_t filters = { { 0 } };
 
 //*****************************************************************************
 // Functions
 //*****************************************************************************
 
-//*****************************************************************************
-rule_cmd_t
-rtap_filter_drop(rule_id_t id, rule_cmd_t cmd, void *buf, void *val)
+extern filter_cmd_t rtap_filter_drop(rule_id_t id, filter_cmd_t cmd, void *buf, void *val);
+extern filter_cmd_t rtap_filter_radiotap(rule_id_t id, filter_cmd_t cmd, void *buf, void *val);
+extern filter_cmd_t rtap_filter_80211_mac(rule_id_t id, filter_cmd_t cmd, void *buf, void *val);
+
+filter_cmd_t
+fltr_list_recv( struct sk_buff *skb )
 {
-    return(RULE_CMD_DROP);
+    filter_cmd_t cmd = FILTER_CMD_NONE;
+    return( cmd );
+}
+
+int
+rtap_func( struct sk_buff *skb, struct net_device *dev,
+           struct packet_type *pt, struct net_device *orig_dev )
+{
+
+    filter_cmd_t cmd = FILTER_CMD_NONE;
+
+    // Run through filters
+    cmd = fltr_list_recv( skb );
+
+    // Check if forward command was given
+    if( cmd == FILTER_CMD_FWRD )
+    {
+        ip_list_send( skb );
+    } // end if
+
+    // Free frame
+    kfree_skb( skb );
+
+    // Return success
+    return( 0 );
 }
 
 //*****************************************************************************
-rule_cmd_t
-rtap_filter_radiotap( rule_id_t id, rule_cmd_t cmd, void *buf, void *val )
+filter_cmd_t
+rtap_filter_drop(rule_id_t id, filter_cmd_t cmd, void *buf, void *val)
 {
-    rule_cmd_t ret_cmd = RULE_CMD_NONE;
+    return(FILTER_CMD_DROP);
+}
+
+//*****************************************************************************
+filter_cmd_t
+rtap_filter_radiotap( rule_id_t id, filter_cmd_t cmd, void *buf, void *val )
+{
+    filter_cmd_t ret_cmd = FILTER_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr = 0;
     if ( rthdr ); // TODO: Implement
     switch(id)
@@ -59,10 +118,10 @@ rtap_filter_radiotap( rule_id_t id, rule_cmd_t cmd, void *buf, void *val )
 }
 
 //*****************************************************************************
-rule_cmd_t
-rtap_filter_80211_mac( rule_id_t id, rule_cmd_t cmd, void *buf, void *val )
+filter_cmd_t
+rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, void *buf, void *val )
 {
-    rule_cmd_t ret_cmd = RULE_CMD_NONE;
+    filter_cmd_t ret_cmd = FILTER_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)buf;
     struct ieee80211_hdr *fhdr = (struct ieee80211_hdr *)((uint8_t *)rthdr + cpu_to_le16( rthdr->it_len ) );
     switch( id )
@@ -104,4 +163,186 @@ rtap_filter_80211_mac( rule_id_t id, rule_cmd_t cmd, void *buf, void *val )
     }
     return( ret_cmd );
 }
+
+//*****************************************************************************
+static int
+fltr_list_add( filter_id_t id )
+{
+    filter_t *filter = 0;
+
+    // Allocate new filter list item
+    filter = kmalloc( sizeof(filter_t), GFP_ATOMIC );
+    if( ! filter )
+    {
+        printk( KERN_CRIT "RTAP: Cannot allocate memory\n" );
+        return( -1 );
+    } // end if
+    memset( (void *)filter, 0, sizeof( filter_t ) );
+
+    // Populate filter list item
+
+    // Add device list item to tail of device list
+    spin_lock( &filters.lock );
+    list_add_tail( &filter->list, &filters.list );
+    spin_unlock( &filters.lock );
+
+    // Return non-null network device pointer on success; null on error
+    return( 0 );
+}
+
+//*****************************************************************************
+static int
+fltr_list_remove( filter_id_t id )
+{
+    filter_t *filter = 0;
+    filter_t *tmp = 0;
+    int ret = -1;
+
+    // Search for device in list and remove
+    spin_lock( &filters.lock );
+    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    {
+        if( ! 1 )
+        {
+            printk( KERN_INFO "RTAP: Removing filter: %s\n", "1" );
+            list_del( &filter->list );
+            kfree( filter );
+            ret = 0;
+            break;
+        } // end if
+    } // end loop 
+    spin_unlock( &filters.lock );
+
+    // Return non-null network device pointer on success; null on error
+    return( ret );
+}
+
+//*****************************************************************************
+static int
+fltr_list_clear( void )
+{
+    filter_t *filter = 0;
+    filter_t *tmp = 0;
+
+    // Remove all filters from list
+    spin_lock( &filters.lock );
+    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    {
+        printk( KERN_INFO "RTAP: Removing device: %s\n", "1" );
+        list_del( &filter->list );
+        kfree( filter );
+    } // end loop 
+    spin_unlock( &filters.lock );
+
+    return( 0 );
+}
+
+//*****************************************************************************
+int
+fltr_list_init( void )
+{
+    spin_lock_init( &filters.lock );
+    INIT_LIST_HEAD( &filters.list );
+    dev_list_init( rtap_func );
+    return( 0 );
+}
+
+//*****************************************************************************
+int
+fltr_list_exit( void )
+{
+    dev_list_exit();
+    return( fltr_list_clear() );
+}
+
+//*****************************************************************************
+//*****************************************************************************
+static int
+fltr_proc_show( struct seq_file *file, void *arg )
+{
+    filter_t *filter = 0;
+    filter_t *tmp = 0;
+
+    // Iterate over all filters in list
+    spin_lock( &filters.lock );
+    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    {
+        seq_printf( file, " Id \n" );
+    } // end loop 
+    spin_unlock( &filters.lock );
+
+    return( 0 );
+}
+
+//*****************************************************************************
+static int
+fltr_proc_open( struct inode *inode, struct file *file )
+{
+    return( single_open( file, fltr_proc_show, NULL ) );
+}
+
+//*****************************************************************************
+static int
+fltr_proc_close( struct inode *inode, struct file *file )
+{
+    return( single_release( inode, file ) );
+}
+
+//*****************************************************************************
+static ssize_t
+fltr_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+{
+    return( seq_read( file, buf, cnt, off ) );
+}
+
+//*****************************************************************************
+static loff_t
+fltr_proc_lseek( struct file *file, loff_t off, int cnt )
+{
+    return( seq_lseek( file, off, cnt ) );
+}
+
+//*****************************************************************************
+static ssize_t
+fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+{
+    char fltrstr[256+1] = { 0 };
+    filter_id_t id;
+
+    if( ! cnt )
+    {
+        fltr_list_clear();
+    } // end if
+    else
+    {
+        cnt = (cnt >= 256) ? 256 : cnt;
+        copy_from_user( fltrstr, buf, cnt );
+        sscanf( fltrstr, "%d", (int *)&id );
+        if( fltrstr[0] == '-' )
+        {
+            fltr_list_remove( id );
+        } // end if
+        else if( fltrstr[0] == '+' )
+        {
+            fltr_list_add( id );
+        } // end else
+        else
+        {
+            fltr_list_add( id );
+        } // end else
+    } // end else
+    return( cnt );
+}
+
+//*****************************************************************************
+//*****************************************************************************
+const struct file_operations fltr_proc_fops =
+{
+    .owner      = THIS_MODULE,
+    .open       = fltr_proc_open,
+    .release    = fltr_proc_close,
+    .read       = fltr_proc_read,
+    .llseek     = fltr_proc_lseek,
+    .write      = fltr_proc_write,
+};
 
