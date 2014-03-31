@@ -38,8 +38,9 @@ typedef uint32_t filter_id_t;
 typedef enum filter_type
 {
     FILTER_TYPE_NONE = 0,
-    FILTER_TYPE_RADIOTAP = 1,
-    FILTER_TYPE_80211_MAC = 2,
+    FILTER_TYPE_ALL = 1,
+    FILTER_TYPE_RADIOTAP = 2,
+    FILTER_TYPE_80211_MAC = 3,
     FILTER_TYPE_LAST
 } filter_type_t;
 
@@ -48,22 +49,18 @@ typedef enum filter_cmd
     FILTER_CMD_NONE = 0,
     FILTER_CMD_DROP = 1,
     FILTER_CMD_FWRD = 2,
-    FILTER_CMD_CONT = 3,
     FILTER_CMD_LAST
 } filter_cmd_t;
 
 typedef enum rule_id
 {
     RULE_ID_NONE = 0,
-    RULE_ID_MAC_SA = 1,
-    RULE_ID_MAC_DA = 2,
-    RULE_ID_MAC_FCTL = 3,
-    RULE_ID_DROP = 4,
+    RULE_ID_RTAP_DB = 1,
+    RULE_ID_MAC_SA = 2,
+    RULE_ID_MAC_DA = 3,
+    RULE_ID_MAC_FCTL = 4,
     RULE_ID_LAST
 } rule_id_t;
-
-typedef filter_cmd_t (*filter_func_t)( rule_id_t id, filter_cmd_t cmd,
-                                        struct sk_buff *skb, void *arg );
 
 //*****************************************************************************
 // Global variables

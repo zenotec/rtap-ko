@@ -52,6 +52,16 @@ typedef struct
     char *arg;
 } filter_t;
 
+typedef filter_cmd_t (*filter_func_t)( filter_t *fp, struct sk_buff *skb );
+
+//*****************************************************************************
+// Function prototypes
+//*****************************************************************************
+
+filter_cmd_t rtap_filter_all( filter_t *fp, struct sk_buff *skb );
+filter_cmd_t rtap_filter_radiotap( filter_t *fp, struct sk_buff *skb );
+filter_cmd_t rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb );
+
 //*****************************************************************************
 // Variables
 //*****************************************************************************
@@ -59,16 +69,11 @@ typedef struct
 /* Global */
 
 /* Local */
-filter_cmd_t
-rtap_filter_drop(rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg);
-filter_cmd_t
-rtap_filter_radiotap( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg );
-filter_cmd_t
-rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg );
 
 static filter_func_t filtertbl[] =
 {
     [FILTER_TYPE_NONE] = NULL,
+    [FILTER_TYPE_ALL] = &rtap_filter_all,
     [FILTER_TYPE_RADIOTAP] = &rtap_filter_radiotap,
     [FILTER_TYPE_80211_MAC] = &rtap_filter_80211_mac,
     [FILTER_TYPE_LAST] = NULL
@@ -80,6 +85,7 @@ static filter_t filters = { { 0 } }; // Dynamic filter list
 // Functions
 //*****************************************************************************
 
+//*****************************************************************************
 filter_cmd_t
 fltr_list_recv( struct sk_buff *skb )
 {
@@ -92,13 +98,18 @@ fltr_list_recv( struct sk_buff *skb )
     list_for_each_entry_safe( filter, tmp, &filters.list, list )
     {
         printk( KERN_INFO "RTAP: Running filter: %d\n", filter->fid );
-        filtertbl[filter->type]( filter->rid, filter->cmd, skb, filter->arg );
+        cmd = filtertbl[filter->type]( filter, skb );
+        if( cmd != FILTER_CMD_NONE )
+        {
+            break;
+        } // end if
     } // end loop 
     spin_unlock( &filters.lock );
 
     return( cmd );
 }
 
+//*****************************************************************************
 int
 rtap_func( struct sk_buff *skb, struct net_device *dev,
            struct packet_type *pt, struct net_device *orig_dev )
@@ -110,10 +121,21 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
     cmd = fltr_list_recv( skb );
 
     // Check if forward command was given
-    if( cmd == FILTER_CMD_FWRD )
-    {
-        ip_list_send( skb );
-    } // end if
+    switch( cmd )
+    {    
+        case FILTER_CMD_FWRD:
+            printk( KERN_INFO "RTAP: Forwarding\n" );
+            ip_list_send( skb );
+            break;
+        case FILTER_CMD_DROP:
+            printk( KERN_INFO "RTAP: Dropping\n" );
+            break;
+        case FILTER_CMD_NONE:
+            break;
+        default:
+            printk( KERN_INFO "RTAP: Unknown command\n" );
+            break;
+    } // end switch 
 
     // Free frame
     kfree_skb( skb );
@@ -124,19 +146,19 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
 
 //*****************************************************************************
 filter_cmd_t
-rtap_filter_drop(rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg)
+rtap_filter_all( filter_t *fp, struct sk_buff *skb )
 {
-    return( FILTER_CMD_DROP );
+    return( fp->cmd );
 }
 
 //*****************************************************************************
 filter_cmd_t
-rtap_filter_radiotap( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg )
+rtap_filter_radiotap( filter_t *fp, struct sk_buff *skb )
 {
     filter_cmd_t ret_cmd = FILTER_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)skb->data;
     if ( rthdr ); // TODO: Implement
-    switch( id )
+    switch( fp->rid )
     {
         default:
             break;
@@ -146,43 +168,54 @@ rtap_filter_radiotap( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void 
 
 //*****************************************************************************
 filter_cmd_t
-rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg )
+rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
 {
     filter_cmd_t ret_cmd = FILTER_CMD_NONE;
-    struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)skb->data;
-    struct ieee80211_hdr *fhdr = (struct ieee80211_hdr *)((uint8_t *)rthdr + cpu_to_le16( rthdr->it_len ) );
-    switch( id )
+    struct ieee80211_radiotap_header *rthdr =
+        (struct ieee80211_radiotap_header *)skb->data;
+    struct ieee80211_hdr *fhdr =
+        (struct ieee80211_hdr *)((uint8_t *)rthdr + cpu_to_le16( rthdr->it_len ) );
+    uint8_t mac[6] = { 0 };
+    uint16_t fctl = 0;
+
+    switch( fp->rid )
     {
         case RULE_ID_MAC_SA:
-            //printk( KERN_INFO "RTAP: SA(exp): %02x:%02x:%02x:%02x:%02x:%02x\n",
-            //         ((uint8_t *)val)[0], ((uint8_t *)val)[1], ((uint8_t *)val)[2],
-            //         ((uint8_t *)val)[3], ((uint8_t *)val)[4], ((uint8_t *)val)[5] );
-            //printk(KERN_INFO "RTAP: SA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
-            //         fhdr->addr2[0], fhdr->addr2[1], fhdr->addr2[2],
-            //         fhdr->addr2[3], fhdr->addr2[4], fhdr->addr2[5]);
-            if( ! memcmp( fhdr->addr2, arg, sizeof( fhdr->addr2 ) ) )
+            // Convert mac string to binary
+            sscanf( fp->arg, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                 &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+            printk( KERN_INFO "RTAP: SA(exp): %02x:%02x:%02x:%02x:%02x:%02x\n",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            printk(KERN_INFO "RTAP: SA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
+                     fhdr->addr2[0], fhdr->addr2[1], fhdr->addr2[2],
+                     fhdr->addr2[3], fhdr->addr2[4], fhdr->addr2[5]);
+            if( ! memcmp( fhdr->addr2, mac, sizeof( fhdr->addr2 ) ) )
             {
-                ret_cmd = cmd;
+                ret_cmd = fp->cmd;
             } // end if
             break;
         case RULE_ID_MAC_DA:
-            //printk(KERN_INFO "RTAP: DA(exp): %02x:%02x:%02x:%02x:%02x:%02x\n",
-            //         ((uint8_t *)val)[0], ((uint8_t *)val)[1], ((uint8_t *)val)[2],
-            //         ((uint8_t *)val)[3], ((uint8_t *)val)[4], ((uint8_t *)val)[5]);
-            //printk(KERN_INFO "RTAP: DA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
-            //         fhdr->addr1[0], fhdr->addr1[1], fhdr->addr1[2],
-            //         fhdr->addr1[3], fhdr->addr1[4], fhdr->addr1[5]);
-            if( ! memcmp( fhdr->addr1, arg, sizeof( fhdr->addr1 ) ) )
+            // Convert mac string to binary
+            sscanf( fp->arg, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                 &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+            printk(KERN_INFO "RTAP: DA(exp): %02x:%02x:%02x:%02x:%02x:%02x\n",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            printk(KERN_INFO "RTAP: DA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
+                     fhdr->addr1[0], fhdr->addr1[1], fhdr->addr1[2],
+                     fhdr->addr1[3], fhdr->addr1[4], fhdr->addr1[5]);
+            if( ! memcmp( fhdr->addr1, fp->arg, sizeof( fhdr->addr1 ) ) )
             {
-                ret_cmd = cmd;
+                ret_cmd = fp->cmd;
             } // end if
             break;
         case RULE_ID_MAC_FCTL:
-            //printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", *(uint16_t *)val);
-            //printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
-            if( cpu_to_le16( fhdr->frame_control ) == *(uint16_t *)arg )
+            // Convert fctl string to binary
+            sscanf( fp->arg, "%hx", &fctl );
+            printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", fctl);
+            printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
+            if( cpu_to_le16( fhdr->frame_control ) == fctl )
             {
-                ret_cmd = cmd;
+                ret_cmd = fp->cmd;
             } // end if
             break;
         default:
