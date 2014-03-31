@@ -28,15 +28,6 @@
 // Type definitions
 //*****************************************************************************
 
-typedef enum rule_id
-{
-    RULE_ID_NONE = 0,
-    RULE_ID_MAC_SA = 1,
-    RULE_ID_MAC_DA = 2,
-    RULE_ID_MAC_FCTL = 3,
-    RULE_ID_DROP
-} rule_id_t;
-
 typedef struct rule
 {
     uint16_t id;

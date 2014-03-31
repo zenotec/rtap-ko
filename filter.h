@@ -33,13 +33,15 @@
 // Type definitions
 //*****************************************************************************
 
-typedef enum filter_id
+typedef uint32_t filter_id_t;
+
+typedef enum filter_type
 {
-    FILTER_ID_NONE = 0,
-    FILTER_ID_RADIOTAP = 1,
-    FILTER_ID_80211_MAC = 2,
-    FILTER_ID_LAST
-} filter_id_t;
+    FILTER_TYPE_NONE = 0,
+    FILTER_TYPE_RADIOTAP = 1,
+    FILTER_TYPE_80211_MAC = 2,
+    FILTER_TYPE_LAST
+} filter_type_t;
 
 typedef enum filter_cmd
 {
@@ -50,8 +52,18 @@ typedef enum filter_cmd
     FILTER_CMD_LAST
 } filter_cmd_t;
 
+typedef enum rule_id
+{
+    RULE_ID_NONE = 0,
+    RULE_ID_MAC_SA = 1,
+    RULE_ID_MAC_DA = 2,
+    RULE_ID_MAC_FCTL = 3,
+    RULE_ID_DROP = 4,
+    RULE_ID_LAST
+} rule_id_t;
+
 typedef filter_cmd_t (*filter_func_t)( rule_id_t id, filter_cmd_t cmd,
-                                        void *buf, void *val );
+                                        struct sk_buff *skb, void *arg );
 
 //*****************************************************************************
 // Global variables
@@ -65,6 +77,6 @@ extern const struct file_operations fltr_proc_fops;
 
 extern int fltr_list_init( void );
 extern int fltr_list_exit( void );
-extern filter_cmd_t fltr_list_recv( struct sk_buff *skb );
 
 #endif
+

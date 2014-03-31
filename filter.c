@@ -45,6 +45,11 @@ typedef struct
 {
     struct list_head list;
     spinlock_t lock;
+    filter_id_t fid;
+    filter_type_t type;
+    filter_cmd_t cmd;
+    rule_id_t rid;
+    char *arg;
 } filter_t;
 
 //*****************************************************************************
@@ -54,21 +59,43 @@ typedef struct
 /* Global */
 
 /* Local */
+filter_cmd_t
+rtap_filter_drop(rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg);
+filter_cmd_t
+rtap_filter_radiotap( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg );
+filter_cmd_t
+rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg );
 
-static filter_t filters = { { 0 } };
+static filter_func_t filtertbl[] =
+{
+    [FILTER_TYPE_NONE] = NULL,
+    [FILTER_TYPE_RADIOTAP] = &rtap_filter_radiotap,
+    [FILTER_TYPE_80211_MAC] = &rtap_filter_80211_mac,
+    [FILTER_TYPE_LAST] = NULL
+};
+
+static filter_t filters = { { 0 } }; // Dynamic filter list
 
 //*****************************************************************************
 // Functions
 //*****************************************************************************
 
-extern filter_cmd_t rtap_filter_drop(rule_id_t id, filter_cmd_t cmd, void *buf, void *val);
-extern filter_cmd_t rtap_filter_radiotap(rule_id_t id, filter_cmd_t cmd, void *buf, void *val);
-extern filter_cmd_t rtap_filter_80211_mac(rule_id_t id, filter_cmd_t cmd, void *buf, void *val);
-
 filter_cmd_t
 fltr_list_recv( struct sk_buff *skb )
 {
-    filter_cmd_t cmd = FILTER_CMD_NONE;
+    filter_cmd_t cmd = FILTER_CMD_DROP;
+    filter_t *filter = 0;
+    filter_t *tmp = 0;
+
+    // Loop through all filters
+    spin_lock( &filters.lock );
+    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    {
+        printk( KERN_INFO "RTAP: Running filter: %d\n", filter->fid );
+        filtertbl[filter->type]( filter->rid, filter->cmd, skb, filter->arg );
+    } // end loop 
+    spin_unlock( &filters.lock );
+
     return( cmd );
 }
 
@@ -97,32 +124,32 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
 
 //*****************************************************************************
 filter_cmd_t
-rtap_filter_drop(rule_id_t id, filter_cmd_t cmd, void *buf, void *val)
+rtap_filter_drop(rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg)
 {
-    return(FILTER_CMD_DROP);
+    return( FILTER_CMD_DROP );
 }
 
 //*****************************************************************************
 filter_cmd_t
-rtap_filter_radiotap( rule_id_t id, filter_cmd_t cmd, void *buf, void *val )
+rtap_filter_radiotap( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg )
 {
     filter_cmd_t ret_cmd = FILTER_CMD_NONE;
-    struct ieee80211_radiotap_header *rthdr = 0;
+    struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)skb->data;
     if ( rthdr ); // TODO: Implement
-    switch(id)
+    switch( id )
     {
         default:
             break;
     }
-    return(ret_cmd);
+    return( ret_cmd );
 }
 
 //*****************************************************************************
 filter_cmd_t
-rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, void *buf, void *val )
+rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, struct sk_buff *skb, void *arg )
 {
     filter_cmd_t ret_cmd = FILTER_CMD_NONE;
-    struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)buf;
+    struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)skb->data;
     struct ieee80211_hdr *fhdr = (struct ieee80211_hdr *)((uint8_t *)rthdr + cpu_to_le16( rthdr->it_len ) );
     switch( id )
     {
@@ -133,7 +160,7 @@ rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, void *buf, void *val )
             //printk(KERN_INFO "RTAP: SA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
             //         fhdr->addr2[0], fhdr->addr2[1], fhdr->addr2[2],
             //         fhdr->addr2[3], fhdr->addr2[4], fhdr->addr2[5]);
-            if( !memcmp(fhdr->addr2, val, sizeof(fhdr->addr2)) )
+            if( ! memcmp( fhdr->addr2, arg, sizeof( fhdr->addr2 ) ) )
             {
                 ret_cmd = cmd;
             } // end if
@@ -145,7 +172,7 @@ rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, void *buf, void *val )
             //printk(KERN_INFO "RTAP: DA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
             //         fhdr->addr1[0], fhdr->addr1[1], fhdr->addr1[2],
             //         fhdr->addr1[3], fhdr->addr1[4], fhdr->addr1[5]);
-            if( !memcmp(fhdr->addr1, val, sizeof(fhdr->addr1)) )
+            if( ! memcmp( fhdr->addr1, arg, sizeof( fhdr->addr1 ) ) )
             {
                 ret_cmd = cmd;
             } // end if
@@ -153,7 +180,7 @@ rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, void *buf, void *val )
         case RULE_ID_MAC_FCTL:
             //printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", *(uint16_t *)val);
             //printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
-            if( cpu_to_le16(fhdr->frame_control) == *(uint16_t *)val )
+            if( cpu_to_le16( fhdr->frame_control ) == *(uint16_t *)arg )
             {
                 ret_cmd = cmd;
             } // end if
@@ -166,9 +193,31 @@ rtap_filter_80211_mac( rule_id_t id, filter_cmd_t cmd, void *buf, void *val )
 
 //*****************************************************************************
 static int
-fltr_list_add( filter_id_t id )
+fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
+                 filter_cmd_t cmd, char *arg )
 {
     filter_t *filter = 0;
+
+    // Validate filter type
+    if( (type <= FILTER_TYPE_NONE) || (type >= FILTER_TYPE_LAST) )
+    {
+        printk( KERN_ERR "RTAP: Filter type %d not supported\n", type );
+        return( -1 );
+    } // end if
+
+    // Validate rule id
+    if( (rid <= RULE_ID_NONE) || (rid >= RULE_ID_LAST) )
+    {
+        printk( KERN_ERR "RTAP: Rule id %d not supported\n", rid );
+        return( -1 );
+    } // end if
+
+    // Validate filter command
+    if( (cmd <= FILTER_CMD_NONE) || (cmd >= FILTER_CMD_LAST) )
+    {
+        printk( KERN_ERR "RTAP: Filter command %d not supported\n", cmd );
+        return( -1 );
+    } // end if
 
     // Allocate new filter list item
     filter = kmalloc( sizeof(filter_t), GFP_ATOMIC );
@@ -180,6 +229,11 @@ fltr_list_add( filter_id_t id )
     memset( (void *)filter, 0, sizeof( filter_t ) );
 
     // Populate filter list item
+    filter->fid = fid;
+    filter->type = type;
+    filter->cmd = cmd;
+    filter->rid = rid;
+    filter->arg = arg;
 
     // Add device list item to tail of device list
     spin_lock( &filters.lock );
@@ -202,10 +256,11 @@ fltr_list_remove( filter_id_t id )
     spin_lock( &filters.lock );
     list_for_each_entry_safe( filter, tmp, &filters.list, list )
     {
-        if( ! 1 )
+        if( filter->fid == id )
         {
-            printk( KERN_INFO "RTAP: Removing filter: %s\n", "1" );
+            printk( KERN_INFO "RTAP: Removing filter: %d\n", id );
             list_del( &filter->list );
+            kfree( filter->arg );
             kfree( filter );
             ret = 0;
             break;
@@ -228,8 +283,9 @@ fltr_list_clear( void )
     spin_lock( &filters.lock );
     list_for_each_entry_safe( filter, tmp, &filters.list, list )
     {
-        printk( KERN_INFO "RTAP: Removing device: %s\n", "1" );
+        printk( KERN_INFO "RTAP: Removing filter: %d\n", filter->fid );
         list_del( &filter->list );
+        kfree( filter->arg );
         kfree( filter );
     } // end loop 
     spin_unlock( &filters.lock );
@@ -267,7 +323,8 @@ fltr_proc_show( struct seq_file *file, void *arg )
     spin_lock( &filters.lock );
     list_for_each_entry_safe( filter, tmp, &filters.list, list )
     {
-        seq_printf( file, " Id \n" );
+        seq_printf( file, "%d\tFilter Type[%d]\tRule[%d]\tCmd[%d]\tArg: %s\n",
+         filter->fid, filter->type, filter->rid, filter->cmd, filter->arg );
     } // end loop 
     spin_unlock( &filters.lock );
 
@@ -307,30 +364,46 @@ static ssize_t
 fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
     char fltrstr[256+1] = { 0 };
-    filter_id_t id;
+    int fid; // filter id
+    int type; // filter type
+    int cmd; // filter cmd
+    int rid; // rule id
+    char *str; // filter argument string
+    int ret = 0;
 
     if( ! cnt )
     {
         fltr_list_clear();
+        return( cnt );
+    } // end if
+
+    // Allocate new filter list item
+    str = kmalloc( 256+1, GFP_ATOMIC );
+    if( ! str )
+    {
+        printk( KERN_CRIT "RTAP: Cannot allocate memory\n" );
+        return( -1 );
+    } // end if
+    memset( (void *)str, 0, 256+1 );
+
+    cnt = (cnt >= 256) ? 256 : cnt;
+    copy_from_user( fltrstr, buf, cnt );
+    ret = sscanf( fltrstr, "%d %d %d %d %256s", &fid, &type, &rid, &cmd, str );
+    if( (ret == 5) && (fid > 0) && (rid > 0) && (strlen(str) > 0) )
+    {
+        fltr_list_add( fid, type, rid, cmd, str );
+    } // end if
+    else if( (ret == 1) && (fid < 0) )
+    {
+        fltr_list_remove( -fid );
     } // end if
     else
     {
-        cnt = (cnt >= 256) ? 256 : cnt;
-        copy_from_user( fltrstr, buf, cnt );
-        sscanf( fltrstr, "%d", (int *)&id );
-        if( fltrstr[0] == '-' )
-        {
-            fltr_list_remove( id );
-        } // end if
-        else if( fltrstr[0] == '+' )
-        {
-            fltr_list_add( id );
-        } // end else
-        else
-        {
-            fltr_list_add( id );
-        } // end else
+        printk( KERN_ERR "RTAP: Failed parsing filter string: %s\n", fltrstr );
+        return( -1 );
     } // end else
+
+    // Return number of bytes written
     return( cnt );
 }
 
