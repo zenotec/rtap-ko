@@ -182,11 +182,11 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
             // Convert mac string to binary
             sscanf( fp->arg, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
                  &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
-            printk( KERN_INFO "RTAP: SA(exp): %02x:%02x:%02x:%02x:%02x:%02x\n",
-                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-            printk(KERN_INFO "RTAP: SA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
-                     fhdr->addr2[0], fhdr->addr2[1], fhdr->addr2[2],
-                     fhdr->addr2[3], fhdr->addr2[4], fhdr->addr2[5]);
+            //printk( KERN_INFO "RTAP: SA(exp): %02x:%02x:%02x:%02x:%02x:%02x\n",
+            //     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            //printk(KERN_INFO "RTAP: SA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
+            //         fhdr->addr2[0], fhdr->addr2[1], fhdr->addr2[2],
+            //         fhdr->addr2[3], fhdr->addr2[4], fhdr->addr2[5]);
             if( ! memcmp( fhdr->addr2, mac, sizeof( fhdr->addr2 ) ) )
             {
                 ret_cmd = fp->cmd;
@@ -196,11 +196,11 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
             // Convert mac string to binary
             sscanf( fp->arg, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
                  &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
-            printk(KERN_INFO "RTAP: DA(exp): %02x:%02x:%02x:%02x:%02x:%02x\n",
-                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-            printk(KERN_INFO "RTAP: DA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
-                     fhdr->addr1[0], fhdr->addr1[1], fhdr->addr1[2],
-                     fhdr->addr1[3], fhdr->addr1[4], fhdr->addr1[5]);
+            //printk(KERN_INFO "RTAP: DA(exp): %02x:%02x:%02x:%02x:%02x:%02x\n",
+            //     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            //printk(KERN_INFO "RTAP: DA(obs): %02x:%02x:%02x:%02x:%02x:%02x\n",
+            //         fhdr->addr1[0], fhdr->addr1[1], fhdr->addr1[2],
+            //         fhdr->addr1[3], fhdr->addr1[4], fhdr->addr1[5]);
             if( ! memcmp( fhdr->addr1, fp->arg, sizeof( fhdr->addr1 ) ) )
             {
                 ret_cmd = fp->cmd;
@@ -209,8 +209,8 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
         case RULE_ID_MAC_FCTL:
             // Convert fctl string to binary
             sscanf( fp->arg, "%hx", &fctl );
-            printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", fctl);
-            printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
+            //printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", fctl);
+            //printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
             if( cpu_to_le16( fhdr->frame_control ) == fctl )
             {
                 ret_cmd = fp->cmd;

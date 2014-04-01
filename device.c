@@ -261,7 +261,7 @@ dev_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *o
     } // end else if
     else
     {
-        printk( KERN_ERR "RTAP: Failed parsing IP string: %s\n", devstr );
+        printk( KERN_ERR "RTAP: Failed parsing device string: %s\n", devstr );
         return( -1 );
     } // end else
 
