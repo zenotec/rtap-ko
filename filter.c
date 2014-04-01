@@ -128,8 +128,6 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
             ip_list_send( skb );
             break;
         case FILTER_CMD_DROP:
-            printk( KERN_INFO "RTAP: Dropping\n" );
-            break;
         case FILTER_CMD_NONE:
             break;
         default:
