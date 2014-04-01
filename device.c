@@ -232,15 +232,20 @@ dev_proc_lseek( struct file *file, loff_t off, int cnt )
 static ssize_t
 dev_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
+    char devstr[256+1] = { 0 };
     char devname[256+1] = { 0 };
-    if( ! cnt )
+    int ret = 0;
+
+    cnt = (cnt >= 256) ? 256 : cnt;
+    copy_from_user( devstr, buf, cnt );
+    ret = sscanf( devstr, "%256s", devname );
+
+    if( (ret == 1) && (strlen(devname) == 1) && (devname[0] == '-') )
     {
         dev_list_clear();
     } // end if
-    else
+    else if( (ret == 1) && (strlen(devname) > 1) )
     {
-        cnt = (cnt >= 256) ? 256 : cnt;
-        copy_from_user( devname, buf, cnt );
         if( devname[0] == '-' )
         {
             dev_list_remove( &devname[1] );
@@ -253,8 +258,15 @@ dev_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *o
         {
             dev_list_add( devname );
         } // end else
+    } // end else if
+    else
+    {
+        printk( KERN_ERR "RTAP: Failed parsing IP string: %s\n", devstr );
+        return( -1 );
     } // end else
+
     return( cnt );
+
 }
 
 //*****************************************************************************

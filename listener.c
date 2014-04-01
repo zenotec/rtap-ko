@@ -238,15 +238,20 @@ ip_proc_lseek( struct file *file, loff_t off, int cnt )
 static ssize_t
 ip_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
-    char ipaddr[256+1] = { 0 };
-    if( ! cnt )
+    char ipstr[256+1] = { 0 };
+    char ipaddr[16+1] = { 0 };
+    int ret = 0;
+
+    cnt = (cnt >= 256) ? 256 : cnt;
+    copy_from_user( ipstr, buf, cnt );
+    ret = sscanf( ipstr, "%16s", ipaddr );
+
+    if( (ret == 1) && (strlen(ipaddr) == 1) && (ipaddr[0] == '-') )
     {
         ip_list_clear();
     } // end if
-    else
+    else if( (ret == 1) && (strlen(ipaddr) > 1) )
     {
-        cnt = (cnt >= 256) ? 256 : cnt;
-        copy_from_user( ipaddr, buf, cnt );
         if( ipaddr[0] == '-' )
         {
             ip_list_remove( &ipaddr[1] );
@@ -259,7 +264,13 @@ ip_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *of
         {
             ip_list_add( ipaddr );
         } // end else
+    } // end else if
+    else
+    {
+        printk( KERN_ERR "RTAP: Failed parsing IP string: %s\n", ipstr );
+        return( -1 );
     } // end else
+
     return( cnt );
 }
 

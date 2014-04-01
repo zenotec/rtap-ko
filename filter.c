@@ -422,10 +422,15 @@ fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *
     cnt = (cnt >= 256) ? 256 : cnt;
     copy_from_user( fltrstr, buf, cnt );
     ret = sscanf( fltrstr, "%d %d %d %d %256s", &fid, &type, &rid, &cmd, str );
-    if( (ret == 5) && (fid > 0) && (rid > 0) && (strlen(str) > 0) )
+
+    if( (ret == 0) && (strlen(fltrstr) == 1) && (fltrstr[0] == '-') )
+    {
+        fltr_list_clear();
+    } // end if
+    else if( (ret == 5) && (fid > 0) && (rid > 0) && (strlen(str) > 0) )
     {
         fltr_list_add( fid, type, rid, cmd, str );
-    } // end if
+    } // end else if
     else if( (ret == 1) && (fid < 0) )
     {
         fltr_list_remove( -fid );
