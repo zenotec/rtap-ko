@@ -1,10 +1,18 @@
 obj-m = rtap.o
 rtap-objs := rtap-ko.o filter.o rule.o ksocket.o device.o listener.o proc.o
 
-KVERSION = $(shell uname -r)
+SRC := $(shell pwd)
+KVERSION := $(shell uname -r)
+KERNEL_SRC ?= /lib/modules/$(KVERSION)/build
+
+
 all:
-	make -C /lib/modules/$(KVERSION)/build M=$(PWD) modules
+	$(MAKE) -C $(KERNEL_SRC) M=$(SRC)
+
+modules_install:
+	$(MAKE) -C $(KERNEL_SRC) M=$(SRC) modules_install
+
 clean:
-	make -C /lib/modules/$(KVERSION)/build M=$(PWD) clean
+	$(MAKE) -C $(KERNEL_SRC) M=$(SRC) clean
 
 
