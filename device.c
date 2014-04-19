@@ -24,6 +24,7 @@
 // Includes
 //*****************************************************************************
 
+#include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/list.h>
 #include <linux/proc_fs.h>
