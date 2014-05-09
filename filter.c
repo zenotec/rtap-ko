@@ -90,7 +90,7 @@ static filter_t filters = { { 0 } }; // Dynamic filter list
 filter_cmd_t
 fltr_list_recv( struct sk_buff *skb )
 {
-    filter_cmd_t cmd = FILTER_CMD_DROP;
+    filter_cmd_t cmd = FILTER_CMD_NONE;
     filter_t *filter = 0;
     filter_t *tmp = 0;
 
@@ -98,7 +98,6 @@ fltr_list_recv( struct sk_buff *skb )
     spin_lock( &filters.lock );
     list_for_each_entry_safe( filter, tmp, &filters.list, list )
     {
-        printk( KERN_INFO "RTAP: Running filter: %d\n", filter->fid );
         cmd = filtertbl[filter->type]( filter, skb );
         if( cmd != FILTER_CMD_NONE )
         {
@@ -118,6 +117,8 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
 
     filter_cmd_t cmd = FILTER_CMD_NONE;
 
+    //printk( KERN_INFO "RTAP: Received\n" );
+
     // Run through filters
     cmd = fltr_list_recv( skb );
 
@@ -129,6 +130,7 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
             ip_list_send( skb );
             break;
         case FILTER_CMD_DROP:
+            printk( KERN_INFO "RTAP: Dropping\n" );
         case FILTER_CMD_NONE:
             break;
         default:
@@ -143,6 +145,52 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
     return( 0 );
 }
 
+//*****************************************************************************
+//*****************************************************************************
+
+static const char *filter_type_str( filter_type_t type )
+{
+    const char *str = 0;
+    switch( type )
+    {
+        case FILTER_TYPE_NONE:
+            str = "NULL";
+            break;
+        case FILTER_TYPE_ALL:
+            str = "All";
+            break;
+        case FILTER_TYPE_RADIOTAP:
+            str = "RadioTap";
+            break;
+        case FILTER_TYPE_80211_MAC:
+            str = "802.11 MAC";
+            break;
+        default:
+            str = "Unknown";
+            break;
+    }
+    return( str );
+}
+
+static const char *filter_cmd_str( filter_cmd_t cmd )
+{
+    const char *str = 0;
+    switch( cmd )
+    {
+        case FILTER_CMD_DROP:
+            str = "Drop";
+            break;
+        case FILTER_CMD_FWRD:
+            str = "Forward";
+            break;
+        default:
+            str = "Unknown";
+            break;
+    }
+    return( str );
+}
+
+//*****************************************************************************
 //*****************************************************************************
 filter_cmd_t
 rtap_filter_all( filter_t *fp, struct sk_buff *skb )
@@ -210,8 +258,8 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
         case RULE_ID_MAC_FCTL:
             // Convert fctl string to binary
             sscanf( fp->arg, "%hx", &fctl );
-            //printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", fctl);
-            //printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
+            printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", fctl);
+            printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
             if( cpu_to_le16( fhdr->frame_control ) == fctl )
             {
                 ret_cmd = fp->cmd;
@@ -266,6 +314,9 @@ fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
     filter->cmd = cmd;
     filter->rid = rid;
     filter->arg = arg;
+
+    printk( KERN_INFO "RTAP: Adding filter: #%d Type[%s] Cmd[%s] Arg: %s\n",
+            fid, filter_type_str(type), filter_cmd_str(cmd), arg );
 
     // Add device list item to tail of device list
     spin_lock( &filters.lock );
