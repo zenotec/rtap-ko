@@ -258,8 +258,8 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
         case RULE_ID_MAC_FCTL:
             // Convert fctl string to binary
             sscanf( fp->arg, "%hx", &fctl );
-            printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", fctl);
-            printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
+            //printk(KERN_INFO "RTAP: FCTL(exp): 0x%04x\n", fctl);
+            //printk(KERN_INFO "RTAP: FCTL(obs): 0x%04x\n", cpu_to_le16(fhdr->frame_control));
             if( cpu_to_le16( fhdr->frame_control ) == fctl )
             {
                 ret_cmd = fp->cmd;
