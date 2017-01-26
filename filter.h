@@ -17,7 +17,21 @@
 //
 //    File: filter.h
 //    Description:  
+//      Filter id, filter type, rule id, filter command, string
 //
+//    Examples: 
+//      Forward all beacons:
+//        filter id:      designates order of operation
+//        filter type:    FILTER_TYPE_80211_MAC (3)
+//        rule id:        RULE_ID_MAC_FCTL (4)
+//        filter command: FILTER_CMD_FWRD (2)
+//        filter string:  0080 (Beacon frame)
+//      Forward all probe requests:
+//        filter id:      designates order of operation
+//        filter type:    FILTER_TYPE_80211_MAC (3)
+//        rule id:        RULE_ID_MAC_FCTL (4)
+//        filter command: FILTER_CMD_FWRD (2)
+//        filter string:  0040 (Probe request frame)
 //*****************************************************************************
 
 #ifndef __FILTER_H__

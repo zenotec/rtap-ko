@@ -27,6 +27,7 @@
 
 #include <linux/version.h>
 #include <linux/kernel.h>
+#include <linux/fs.h>
 #include <linux/socket.h>
 #include <linux/net.h>
 #include <linux/in.h>
@@ -79,22 +80,20 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
 {
     struct socket *sk;
     struct msghdr msg;
-    struct iovec iov;
+    struct iovec vec;
     int len;
     mm_segment_t fs;
 
     sk = (struct socket *)socket;
 
-    iov.iov_base = (void *)message;
-    iov.iov_len = (__kernel_size_t)length;
+    vec.iov_base = (void *)message;
+    vec.iov_len = (__kernel_size_t)length;
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(3,18,0)
-    msg.msg_iov = &iov;
+    msg.msg_iov = &vec;
     msg.msg_iovlen = 1;
 #else
-    msg.msg_iter.type = ITER_IOVEC;
-    msg.msg_iter.count = 1;
-    msg.msg_iter.iov = &iov;
+    iov_iter_init(&msg.msg_iter, WRITE | ITER_IOVEC, &vec, 1, length);
 #endif
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
