@@ -25,6 +25,7 @@
 // Includes
 //*****************************************************************************
 
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/socket.h>
 #include <linux/net.h>
@@ -87,8 +88,14 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
     iov.iov_base = (void *)message;
     iov.iov_len = (__kernel_size_t)length;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,18,0)
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
+#else
+    msg.msg_iter.type = ITER_IOVEC;
+    msg.msg_iter.count = 1;
+    msg.msg_iter.iov = &iov;
+#endif
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
 
@@ -101,7 +108,11 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
 
     fs = get_fs();
     set_fs( KERNEL_DS );
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,18,0)
     len = sock_sendmsg( sk, &msg, length );
+#else
+    len = sock_sendmsg( sk, &msg);
+#endif
     set_fs( fs );
 	
     return( len );
