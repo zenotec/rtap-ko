@@ -126,11 +126,11 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
     switch( cmd )
     {    
         case FILTER_CMD_FWRD:
-            printk( KERN_INFO "RTAP: Forwarding\n" );
+            //printk( KERN_INFO "RTAP: Forwarding\n" );
             ip_list_send( skb );
             break;
         case FILTER_CMD_DROP:
-            printk( KERN_INFO "RTAP: Dropping\n" );
+            //printk( KERN_INFO "RTAP: Dropping\n" );
         case FILTER_CMD_NONE:
             break;
         default:

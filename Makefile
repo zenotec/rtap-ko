@@ -9,6 +9,12 @@ KERNEL_SRC ?= /lib/modules/$(KVERSION)/build
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(SRC)
 
+modules:
+	$(MAKE) -C $(KERNEL_SRC) M=$(SRC)
+
+install:
+	$(MAKE) -C $(KERNEL_SRC) M=$(SRC) modules_install
+
 modules_install:
 	$(MAKE) -C $(KERNEL_SRC) M=$(SRC) modules_install
 

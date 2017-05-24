@@ -61,7 +61,7 @@ static listener_t listeners = { { 0 } };
 
 //*****************************************************************************
 static int
-ip_list_add( const char *ipaddr )
+ip_list_add( const char *ipaddr, const short port )
 {
     listener_t *listener = NULL;
 
@@ -77,8 +77,8 @@ ip_list_add( const char *ipaddr )
     // Convert IP string to socket address
     memset( &listener->in_addr, 0, sizeof( listener->in_addr ) );
     listener->in_addr.sin_family = AF_INET;
-    listener->in_addr.sin_port = htons( 8888 );
     inet_aton( ipaddr, &listener->in_addr.sin_addr );
+    listener->in_addr.sin_port = htons( port );
     listener->sockfd = ksocket( AF_INET, SOCK_DGRAM, 0 );
     if( listener->sockfd == NULL )
     {
@@ -97,6 +97,7 @@ ip_list_add( const char *ipaddr )
     } // end if
 
     // Add device list item to tail of device list
+    printk( KERN_INFO "RTAP: Adding listener: %s:%hu\n", listener->ipaddr, port );
     spin_lock( &listeners.lock );
     list_add_tail( &listener->list, &listeners.list );
     spin_unlock( &listeners.lock );
@@ -107,7 +108,7 @@ ip_list_add( const char *ipaddr )
 
 //*****************************************************************************
 static int
-ip_list_remove( const char *ipaddr )
+ip_list_remove( const char *ipaddr, const short port )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
@@ -117,9 +118,10 @@ ip_list_remove( const char *ipaddr )
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
-        if( ! strcmp( listener->ipaddr, ipaddr ) )
+        if( ! strcmp( listener->ipaddr, ipaddr ) && (listener->in_addr.sin_port == htons( port )) )
         {
-            printk( KERN_INFO "RTAP: Removing listener: %s\n", listener->ipaddr );
+            printk( KERN_INFO "RTAP: Removing listener: %s:%hu\n",
+                    listener->ipaddr, ntohs(listener->in_addr.sin_port) );
             list_del( &listener->list );
             kfree( listener->ipaddr );
             kfree( listener );
@@ -144,7 +146,8 @@ ip_list_clear( void )
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
-        printk( KERN_INFO "RTAP: Removing listener: %s\n", listener->ipaddr );
+        printk( KERN_INFO "RTAP: Removing listener: %s:%hu\n",
+                listener->ipaddr, ntohs(listener->in_addr.sin_port) );
         list_del( &listener->list );
         kfree( listener->ipaddr );
         kfree( listener );
@@ -200,7 +203,8 @@ ip_proc_show( struct seq_file *file, void *arg )
     spin_lock( &listeners.lock );
     list_for_each_entry_safe( listener, tmp, &listeners.list, list )
     {
-        seq_printf( file, "%s\n", listener->ipaddr );
+        seq_printf( file, "%s:%hu\n", listener->ipaddr,
+                    ntohs(listener->in_addr.sin_port) );
     } // end loop 
     spin_unlock( &listeners.lock );
 
@@ -241,29 +245,30 @@ ip_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *of
 {
     char ipstr[256+1] = { 0 };
     char ipaddr[16+1] = { 0 };
+    short port = 8888;
     int ret = 0;
 
     cnt = (cnt >= 256) ? 256 : cnt;
     copy_from_user( ipstr, buf, cnt );
-    ret = sscanf( ipstr, "%16s", ipaddr );
+    ret = sscanf( ipstr, "%16s:%hu", ipaddr, &port );
 
     if( (ret == 1) && (strlen(ipaddr) == 1) && (ipaddr[0] == '-') )
     {
         ip_list_clear();
     } // end if
-    else if( (ret == 1) && (strlen(ipaddr) > 1) )
+    else if( (ret >= 1) && (strlen(ipaddr) > 1) )
     {
         if( ipaddr[0] == '-' )
         {
-            ip_list_remove( &ipaddr[1] );
+            ip_list_remove( &ipaddr[1], port );
         } // end if
         else if( ipaddr[0] == '+' )
         {
-            ip_list_add( &ipaddr[1] );
+            ip_list_add( &ipaddr[1], port );
         } // end else
         else
         {
-            ip_list_add( ipaddr );
+            ip_list_add( ipaddr, port );
         } // end else
     } // end else if
     else

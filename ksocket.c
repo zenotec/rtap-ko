@@ -93,7 +93,7 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
     msg.msg_iov = &vec;
     msg.msg_iovlen = 1;
 #else
-    iov_iter_init(&msg.msg_iter, WRITE | ITER_IOVEC, &vec, 1, length);
+    iov_iter_init( &msg.msg_iter, WRITE | ITER_IOVEC, &vec, 1, length );
 #endif
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
@@ -110,7 +110,7 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(3,18,0)
     len = sock_sendmsg( sk, &msg, length );
 #else
-    len = sock_sendmsg( sk, &msg);
+    len = sock_sendmsg( sk, &msg );
 #endif
     set_fs( fs );
 	
