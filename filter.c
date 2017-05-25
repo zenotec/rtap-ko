@@ -36,6 +36,7 @@
 #include "device.h"
 #include "listener.h"
 #include "rule.h"
+#include "stats.h"
 #include "filter.h"
 
 //*****************************************************************************
@@ -87,26 +88,27 @@ static filter_t filters = { { 0 } }; // Dynamic filter list
 //*****************************************************************************
 
 //*****************************************************************************
-filter_cmd_t
+filter_t *
 fltr_list_recv( struct sk_buff *skb )
 {
-    filter_cmd_t cmd = FILTER_CMD_NONE;
+
+    filter_t *f = 0;
     filter_t *filter = 0;
     filter_t *tmp = 0;
 
     // Loop through all filters
     spin_lock( &filters.lock );
-    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    list_for_each_entry_safe( f, tmp, &filters.list, list )
     {
-        cmd = filtertbl[filter->type]( filter, skb );
-        if( cmd != FILTER_CMD_NONE )
+        if( filtertbl[f->type]( f, skb ) != FILTER_CMD_NONE )
         {
+            filter = f;
             break;
         } // end if
     } // end loop 
     spin_unlock( &filters.lock );
 
-    return( cmd );
+    return( filter );
 }
 
 //*****************************************************************************
@@ -115,28 +117,38 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
            struct packet_type *pt, struct net_device *orig_dev )
 {
 
-    filter_cmd_t cmd = FILTER_CMD_NONE;
+    filter_t *filter = 0;
 
     //printk( KERN_INFO "RTAP: Received\n" );
 
     // Run through filters
-    cmd = fltr_list_recv( skb );
-
-    // Check if forward command was given
-    switch( cmd )
-    {    
-        case FILTER_CMD_FWRD:
-            //printk( KERN_INFO "RTAP: Forwarding\n" );
-            ip_list_send( skb );
-            break;
-        case FILTER_CMD_DROP:
-            //printk( KERN_INFO "RTAP: Dropping\n" );
-        case FILTER_CMD_NONE:
-            break;
-        default:
-            printk( KERN_INFO "RTAP: Unknown command\n" );
-            break;
-    } // end switch 
+    filter = fltr_list_recv( skb );
+    if( filter )
+    {
+        // Check if forward command was given
+        switch( filter->cmd )
+        {    
+            case FILTER_CMD_FWRD:
+                //printk( KERN_INFO "RTAP: Forwarding\n" );
+                // Update filter statistics
+                stats_forwarded( filter->fid );
+                ip_list_send( skb );
+                break;
+            case FILTER_CMD_DROP:
+                //printk( KERN_INFO "RTAP: Dropping\n" );
+                // Update filter statistics
+                stats_dropped( filter->fid );
+            case FILTER_CMD_NONE:
+                break;
+            default:
+                printk( KERN_INFO "RTAP: Unknown command\n" );
+                break;
+        } // end switch 
+    } // end if
+    else
+    {
+        stats_dropped( 0 );
+    } // end else
 
     // Free frame
     kfree_skb( skb );
@@ -273,10 +285,44 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
 
 //*****************************************************************************
 static int
+fltr_list_remove( filter_id_t fid )
+{
+    filter_t *filter = 0;
+    filter_t *tmp = 0;
+    int ret = -1;
+
+    // Search for device in list and remove
+    spin_lock( &filters.lock );
+    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    {
+        if( filter->fid == fid )
+        {
+            printk( KERN_INFO "RTAP: Removing filter: %d\n", fid );
+            // Add filter statistics entry
+            stats_list_add( fid );
+            // Remove filter from list
+            list_del( &filter->list );
+            kfree( filter->arg );
+            kfree( filter );
+            ret = 0;
+            break;
+        } // end if
+    } // end loop 
+    spin_unlock( &filters.lock );
+
+    // Return non-null network device pointer on success; null on error
+    return( ret );
+}
+
+//*****************************************************************************
+static int
 fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
                  filter_cmd_t cmd, char *arg )
 {
     filter_t *filter = 0;
+
+    // Remove any duplicate filters
+    fltr_list_remove( fid );
 
     // Validate filter type
     if( (type <= FILTER_TYPE_NONE) || (type >= FILTER_TYPE_LAST) )
@@ -318,41 +364,16 @@ fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
     printk( KERN_INFO "RTAP: Adding filter: #%d Type[%s] Cmd[%s] Arg: %s\n",
             fid, filter_type_str(type), filter_cmd_str(cmd), arg );
 
-    // Add device list item to tail of device list
+    // Add filter statistics entry
+    stats_list_add( fid );
+
+    // Add filter list item to tail of device list
     spin_lock( &filters.lock );
     list_add_tail( &filter->list, &filters.list );
     spin_unlock( &filters.lock );
 
     // Return non-null network device pointer on success; null on error
     return( 0 );
-}
-
-//*****************************************************************************
-static int
-fltr_list_remove( filter_id_t id )
-{
-    filter_t *filter = 0;
-    filter_t *tmp = 0;
-    int ret = -1;
-
-    // Search for device in list and remove
-    spin_lock( &filters.lock );
-    list_for_each_entry_safe( filter, tmp, &filters.list, list )
-    {
-        if( filter->fid == id )
-        {
-            printk( KERN_INFO "RTAP: Removing filter: %d\n", id );
-            list_del( &filter->list );
-            kfree( filter->arg );
-            kfree( filter );
-            ret = 0;
-            break;
-        } // end if
-    } // end loop 
-    spin_unlock( &filters.lock );
-
-    // Return non-null network device pointer on success; null on error
-    return( ret );
 }
 
 //*****************************************************************************

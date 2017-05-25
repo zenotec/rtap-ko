@@ -15,64 +15,48 @@
 //    with this program; if not, write to the Free Software Foundation, Inc.,
 //    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
-//    File: rtap-ko.c
-//    Description: Main module for rtap.ko. Contains top level module
-//                 initialization and parameter parsing.
+//    File: device.h
+//    Description: 
 //
 //*****************************************************************************
 
+#ifndef __STATS_H__
+#define __STATS_H__
+
 //*****************************************************************************
-// Includes
+// Type definitions
 //*****************************************************************************
 
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/init.h>
+//*****************************************************************************
+// Global variables
+//*****************************************************************************
 
-#include "rtap-ko.h"
-#include "rule.h"
-#include "filter.h"
-#include "stats.h"
-#include "device.h"
-#include "listener.h"
-#include "proc.h"
+extern const struct file_operations stats_proc_fops;
 
-/* Module information */
-MODULE_AUTHOR( DRIVER_AUTHOR );
-MODULE_DESCRIPTION( DRIVER_DESC );
-MODULE_LICENSE("GPL");
+//*****************************************************************************
+// Function prototypes
+//*****************************************************************************
 
-static int __init
-rtap_init( void )
-{
+extern int
+stats_list_init( void );
 
-    ip_list_init();
-    stats_list_init();
-    fltr_list_init();
-    rtap_proc_init();
+extern int
+stats_list_exit( void );
 
-    printk( KERN_INFO "RTAP: Driver registered (%s)\n", DRIVER_VERSION );
+extern int
+stats_list_add( const unsigned int fid );
 
-    /* Return ok */
-    return( 0 );
+extern int
+stats_list_remove( const unsigned int fid );
 
-}
+extern int
+stats_forwarded( const unsigned int fid );
 
-static void __exit
-rtap_exit( void )
-{
-    printk( KERN_INFO "RTAP: Unloading module...\n" );
+extern int
+stats_dropped( const unsigned int fid );
 
-    ip_list_exit();
-    stats_list_exit();
-    fltr_list_exit();
-    rtap_proc_exit();
+extern int
+stats_error( const unsigned int fid );
 
-    printk( KERN_INFO "RTAP: ...done.\n" );
 
-    return;
-}
-
-module_init(rtap_init);
-module_exit(rtap_exit);
-
+#endif
