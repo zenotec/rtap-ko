@@ -498,7 +498,7 @@ fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *
     {
         fltr_list_clear();
     } // end if
-    else if( (ret == 5) && (fid > 0) && (rid > 0) && (strlen(str) > 0) )
+    else if( (ret == 5) && (fid > 0) )
     {
         fltr_list_add( fid, type, rid, cmd, str );
     } // end else if
