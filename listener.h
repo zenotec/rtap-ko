@@ -40,14 +40,14 @@
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations ip_proc_fops;
+extern const struct file_operations listener_proc_fops;
 
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
-extern int ip_list_init( void );
-extern int ip_list_exit( void );
-extern int ip_list_send( struct sk_buff *skb );
+extern int listener_init( void );
+extern int listener_exit( void );
+extern int listener_send( struct sk_buff *skb );
 
 #endif

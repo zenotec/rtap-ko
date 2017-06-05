@@ -46,7 +46,7 @@ static int __init
 rtap_init( void )
 {
 
-    ip_list_init();
+    listener_init();
     stats_list_init();
     fltr_list_init();
     rtap_proc_init();
@@ -63,7 +63,7 @@ rtap_exit( void )
 {
     printk( KERN_INFO "RTAP: Unloading module...\n" );
 
-    ip_list_exit();
+    listener_exit();
     stats_list_exit();
     fltr_list_exit();
     rtap_proc_exit();

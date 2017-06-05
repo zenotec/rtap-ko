@@ -81,7 +81,7 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
     struct socket *sk;
     struct msghdr msg;
     struct iovec vec;
-    int len;
+    int len = 0;
     mm_segment_t fs;
 
     sk = (struct socket *)socket;
@@ -110,7 +110,9 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(3,18,0)
     len = sock_sendmsg( sk, &msg, length );
 #else
-    len = sock_sendmsg( sk, &msg );
+	printk( KERN_INFO "RTAP: ksendto(): Sending %d bytes\n", length );
+    len = length;
+//    len = sock_sendmsg( sk, &msg );
 #endif
     set_fs( fs );
 	

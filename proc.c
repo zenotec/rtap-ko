@@ -53,7 +53,7 @@ rtap_proc_init( void )
 {
     rtap_proc_dir = proc_mkdir( "rtap", NULL );
     proc_create( "devices", 0666, rtap_proc_dir, &dev_proc_fops );
-    proc_create( "listeners", 0666, rtap_proc_dir, &ip_proc_fops );
+    proc_create( "listeners", 0666, rtap_proc_dir, &listener_proc_fops );
     proc_create( "filters", 0666, rtap_proc_dir, &fltr_proc_fops );
     proc_create( "stats", 0666, rtap_proc_dir, &stats_proc_fops );
     return( 0 );

@@ -36,29 +36,17 @@ echo -n "127.0.0.1" > /proc/rtap/listeners
 echo -n "mon0" > /proc/rtap/devices
 
 # Forwarding test
-echo "1 3 2 2 F0:25:B7:00:B5:33" > /proc/rtap/filters
+echo "1 3 4 2 0080" > /proc/rtap/filters
 sleep 5
 echo -1 > /proc/rtap/filters
 
 # Validate
+dmesg
 dmesg -c > /tmp/dmesg.log
 if grep "RTAP: Forwarding" /tmp/dmesg.log; then
     echo "Pass 1"
 else
     echo "Fail 1"
-fi
-
-# Drop test
-echo "2 3 2 1 F0:25:B7:00:B5:33" > /proc/rtap/filters
-sleep 5
-echo -2 > /proc/rtap/filters
-
-# Validate
-dmesg -c > /tmp/dmesg.log
-if grep "RTAP: Dropping" /tmp/dmesg.log; then
-    echo "Pass 2"
-else
-    echo "Fail 2"
 fi
 
 # Cleanup

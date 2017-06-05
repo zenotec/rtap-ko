@@ -88,6 +88,7 @@ static filter_t filters = { { 0 } }; // Dynamic filter list
 //*****************************************************************************
 
 //*****************************************************************************
+
 filter_t *
 fltr_list_recv( struct sk_buff *skb )
 {
@@ -112,6 +113,7 @@ fltr_list_recv( struct sk_buff *skb )
 }
 
 //*****************************************************************************
+
 int
 rtap_func( struct sk_buff *skb, struct net_device *dev,
            struct packet_type *pt, struct net_device *orig_dev )
@@ -129,13 +131,13 @@ rtap_func( struct sk_buff *skb, struct net_device *dev,
         switch( filter->cmd )
         {    
             case FILTER_CMD_FWRD:
-                //printk( KERN_INFO "RTAP: Forwarding\n" );
+                printk( KERN_INFO "RTAP: Forwarding\n" );
                 // Update filter statistics
                 stats_forwarded( filter->fid );
-                ip_list_send( skb );
+                listener_send( skb );
                 break;
             case FILTER_CMD_DROP:
-                //printk( KERN_INFO "RTAP: Dropping\n" );
+                printk( KERN_INFO "RTAP: Dropping\n" );
                 // Update filter statistics
                 stats_dropped( filter->fid );
             case FILTER_CMD_NONE:
@@ -166,7 +168,7 @@ static const char *filter_type_str( filter_type_t type )
     switch( type )
     {
         case FILTER_TYPE_NONE:
-            str = "NULL";
+            str = "None";
             break;
         case FILTER_TYPE_ALL:
             str = "All";
@@ -183,6 +185,8 @@ static const char *filter_type_str( filter_type_t type )
     }
     return( str );
 }
+
+//*****************************************************************************
 
 static const char *filter_cmd_str( filter_cmd_t cmd )
 {
@@ -204,13 +208,16 @@ static const char *filter_cmd_str( filter_cmd_t cmd )
 
 //*****************************************************************************
 //*****************************************************************************
+
 filter_cmd_t
 rtap_filter_all( filter_t *fp, struct sk_buff *skb )
 {
+    printk( KERN_INFO "RTAP: filter_all: %d\n", fp->cmd );
     return( fp->cmd );
 }
 
 //*****************************************************************************
+
 filter_cmd_t
 rtap_filter_radiotap( filter_t *fp, struct sk_buff *skb )
 {
@@ -226,6 +233,7 @@ rtap_filter_radiotap( filter_t *fp, struct sk_buff *skb )
 }
 
 //*****************************************************************************
+
 filter_cmd_t
 rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
 {
@@ -284,6 +292,7 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
 }
 
 //*****************************************************************************
+
 static int
 fltr_list_remove( filter_id_t fid )
 {
@@ -315,6 +324,7 @@ fltr_list_remove( filter_id_t fid )
 }
 
 //*****************************************************************************
+
 static int
 fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
                  filter_cmd_t cmd, char *arg )
@@ -332,7 +342,7 @@ fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
     } // end if
 
     // Validate rule id
-    if( (rid <= RULE_ID_NONE) || (rid >= RULE_ID_LAST) )
+    if( (rid < RULE_ID_NONE) || (rid >= RULE_ID_LAST) )
     {
         printk( KERN_ERR "RTAP: Rule id %d not supported\n", rid );
         return( -1 );
@@ -377,6 +387,7 @@ fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
 }
 
 //*****************************************************************************
+
 static int
 fltr_list_clear( void )
 {
@@ -398,6 +409,7 @@ fltr_list_clear( void )
 }
 
 //*****************************************************************************
+
 int
 fltr_list_init( void )
 {
@@ -408,6 +420,7 @@ fltr_list_init( void )
 }
 
 //*****************************************************************************
+
 int
 fltr_list_exit( void )
 {
@@ -417,6 +430,7 @@ fltr_list_exit( void )
 
 //*****************************************************************************
 //*****************************************************************************
+
 static int
 fltr_proc_show( struct seq_file *file, void *arg )
 {
@@ -436,6 +450,7 @@ fltr_proc_show( struct seq_file *file, void *arg )
 }
 
 //*****************************************************************************
+
 static int
 fltr_proc_open( struct inode *inode, struct file *file )
 {
@@ -443,6 +458,7 @@ fltr_proc_open( struct inode *inode, struct file *file )
 }
 
 //*****************************************************************************
+
 static int
 fltr_proc_close( struct inode *inode, struct file *file )
 {
@@ -450,6 +466,7 @@ fltr_proc_close( struct inode *inode, struct file *file )
 }
 
 //*****************************************************************************
+
 static ssize_t
 fltr_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 {
@@ -457,6 +474,7 @@ fltr_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 }
 
 //*****************************************************************************
+
 static loff_t
 fltr_proc_lseek( struct file *file, loff_t off, int cnt )
 {
@@ -464,6 +482,7 @@ fltr_proc_lseek( struct file *file, loff_t off, int cnt )
 }
 
 //*****************************************************************************
+
 static ssize_t
 fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {

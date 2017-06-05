@@ -61,7 +61,7 @@ static listener_t listeners = { { 0 } };
 
 //*****************************************************************************
 static int
-ip_list_add( const char *ipaddr, const short port )
+listener_add( const char *ipaddr, const short port )
 {
     listener_t *listener = NULL;
 
@@ -108,7 +108,7 @@ ip_list_add( const char *ipaddr, const short port )
 
 //*****************************************************************************
 static int
-ip_list_remove( const char *ipaddr, const short port )
+listener_remove( const char *ipaddr, const short port )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
@@ -137,7 +137,7 @@ ip_list_remove( const char *ipaddr, const short port )
 
 //*****************************************************************************
 static int
-ip_list_clear( void )
+listener_clear( void )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
@@ -159,7 +159,7 @@ ip_list_clear( void )
 
 //*****************************************************************************
 int
-ip_list_init( void )
+listener_init( void )
 {
     spin_lock_init( &listeners.lock );
     INIT_LIST_HEAD( &listeners.list );
@@ -168,7 +168,7 @@ ip_list_init( void )
 
 //*****************************************************************************
 int
-ip_list_send( struct sk_buff *skb )
+listener_send( struct sk_buff *skb )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
@@ -186,15 +186,15 @@ ip_list_send( struct sk_buff *skb )
 }
 //*****************************************************************************
 int
-ip_list_exit( void )
+listener_exit( void )
 {
-    return( ip_list_clear() );
+    return( listener_clear() );
 }
 
 //*****************************************************************************
 //*****************************************************************************
 static int
-ip_proc_show( struct seq_file *file, void *arg )
+proc_show( struct seq_file *file, void *arg )
 {
     listener_t *listener = NULL;
     listener_t *tmp = NULL;
@@ -213,67 +213,70 @@ ip_proc_show( struct seq_file *file, void *arg )
 
 //*****************************************************************************
 static int
-ip_proc_open( struct inode *inode, struct file *file )
+proc_open( struct inode *inode, struct file *file )
 {
-    return( single_open( file, ip_proc_show, NULL ) );
+    return( single_open( file, proc_show, NULL ) );
 }
 
 //*****************************************************************************
 static int
-ip_proc_close( struct inode *inode, struct file *file )
+proc_close( struct inode *inode, struct file *file )
 {
     return( single_release( inode, file ) );
 }
 
 //*****************************************************************************
 static ssize_t
-ip_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 {
     return( seq_read( file, buf, cnt, off ) );
 }
 
 //*****************************************************************************
 static loff_t
-ip_proc_lseek( struct file *file, loff_t off, int cnt )
+proc_lseek( struct file *file, loff_t off, int cnt )
 {
     return( seq_lseek( file, off, cnt ) );
 }
 
 //*****************************************************************************
 static ssize_t
-ip_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
-    char ipstr[256+1] = { 0 };
-    char ipaddr[16+1] = { 0 };
+    char str[256+1] = { 0 };
+    char ipaddr[256+1] = { 0 };
     short port = 8888;
     int ret = 0;
 
     cnt = (cnt >= 256) ? 256 : cnt;
-    copy_from_user( ipstr, buf, cnt );
-    ret = sscanf( ipstr, "%16s:%hu", ipaddr, &port );
+    copy_from_user( str, buf, cnt );
+    
+    ret = sscanf( str, "%s %hu", ipaddr, &port );
+
+	//printk( KERN_INFO "RTAP: IP: %s, PORT: %hu\n", ipaddr, port);
 
     if( (ret == 1) && (strlen(ipaddr) == 1) && (ipaddr[0] == '-') )
     {
-        ip_list_clear();
+        listener_clear();
     } // end if
     else if( (ret >= 1) && (strlen(ipaddr) > 1) )
     {
         if( ipaddr[0] == '-' )
         {
-            ip_list_remove( &ipaddr[1], port );
+            listener_remove( &ipaddr[1], port );
         } // end if
         else if( ipaddr[0] == '+' )
         {
-            ip_list_add( &ipaddr[1], port );
+            listener_add( &ipaddr[1], port );
         } // end else
         else
         {
-            ip_list_add( ipaddr, port );
+            listener_add( ipaddr, port );
         } // end else
     } // end else if
     else
     {
-        printk( KERN_ERR "RTAP: Failed parsing IP string: %s\n", ipstr );
+        printk( KERN_ERR "RTAP: Failed parsing IP string: %s\n", str );
         return( -1 );
     } // end else
 
@@ -282,13 +285,13 @@ ip_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *of
 
 //*****************************************************************************
 //*****************************************************************************
-const struct file_operations ip_proc_fops =
+const struct file_operations listener_proc_fops =
 {
     .owner      = THIS_MODULE,
-    .open       = ip_proc_open,
-    .release    = ip_proc_close,
-    .read       = ip_proc_read,
-    .llseek     = ip_proc_lseek,
-    .write      = ip_proc_write,
+    .open       = proc_open,
+    .release    = proc_close,
+    .read       = proc_read,
+    .llseek     = proc_lseek,
+    .write      = proc_write,
 };
 
