@@ -15,30 +15,33 @@
 //    with this program; if not, write to the Free Software Foundation, Inc.,
 //    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
-//    File: device.h
+//    File: recv.c
 //    Description: 
 //
 //*****************************************************************************
 
-#ifndef __DEVICE_H__
-#define __DEVICE_H__
+//*****************************************************************************
+// Includes
+//*****************************************************************************
 
-//*****************************************************************************
-// Type definitions
-//*****************************************************************************
+#include "recv.h"
+#include "filter.h"
 
 //*****************************************************************************
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations device_fops;
 
-//*****************************************************************************
-// Function prototypes
-//*****************************************************************************
-
-extern int device_init( void );
-extern int device_exit( void );
+int
+rtap_recv( struct sk_buff *skb, struct net_device *dev,
+           struct packet_type *pt, struct net_device *orig_dev )
+{
 
 
-#endif
+    // Free frame
+    kfree_skb( skb );
+
+    // Return success
+    return( 0 );
+}
+

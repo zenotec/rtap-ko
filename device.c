@@ -77,7 +77,7 @@ get_devbyname( const char *devname )
 
 //*****************************************************************************
 static int
-dev_list_remove( const char *devname )
+device_remove( const char *devname )
 {
     device_t *dev = 0;
     device_t *tmp = 0;
@@ -105,7 +105,7 @@ dev_list_remove( const char *devname )
 
 //*****************************************************************************
 static struct net_device *
-dev_list_add( const char *devname )
+device_add( const char *devname )
 {
     device_t *dev = 0;
     struct net_device *netdev = 0;
@@ -149,7 +149,7 @@ dev_list_add( const char *devname )
 
 //*****************************************************************************
 static int
-dev_list_clear( void )
+device_clear( void )
 {
     device_t *dev = 0;
     device_t *tmp = 0;
@@ -170,25 +170,24 @@ dev_list_clear( void )
 
 //*****************************************************************************
 int
-dev_list_init( void *func )
+device_init( void *func )
 {
     spin_lock_init( &devices.lock );
     INIT_LIST_HEAD( &devices.list );
-    dev_list_pktfunc = func;
     return( 0 );
 }
 
 //*****************************************************************************
 int
-dev_list_exit( void )
+device_exit( void )
 {
-    return( dev_list_clear() );
+    return( device_clear() );
 }
 
 //*****************************************************************************
 //*****************************************************************************
 static int
-dev_proc_show( struct seq_file *file, void *arg )
+device_show( struct seq_file *file, void *arg )
 {
     device_t *dev = 0;
     device_t *tmp = 0;
@@ -206,35 +205,35 @@ dev_proc_show( struct seq_file *file, void *arg )
 
 //*****************************************************************************
 static int
-dev_proc_open( struct inode *inode, struct file *file )
+device_open( struct inode *inode, struct file *file )
 {
-    return( single_open( file, dev_proc_show, NULL ) );
+    return( single_open( file, device_show, NULL ) );
 }
 
 //*****************************************************************************
 static int
-dev_proc_close( struct inode *inode, struct file *file )
+device_close( struct inode *inode, struct file *file )
 {
     return( single_release( inode, file ) );
 }
 
 //*****************************************************************************
 static ssize_t
-dev_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+device_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 {
     return( seq_read( file, buf, cnt, off ) );
 }
 
 //*****************************************************************************
 static loff_t
-dev_proc_lseek( struct file *file, loff_t off, int cnt )
+device_lseek( struct file *file, loff_t off, int cnt )
 {
     return( seq_lseek( file, off, cnt ) );
 }
 
 //*****************************************************************************
 static ssize_t
-dev_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+device_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
     char devstr[256+1] = { 0 };
     char devname[256+1] = { 0 };
@@ -275,13 +274,13 @@ dev_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *o
 
 //*****************************************************************************
 //*****************************************************************************
-const struct file_operations dev_proc_fops =
+const struct file_operations device_fops =
 {
     .owner      = THIS_MODULE,
-    .open       = dev_proc_open,
-    .release    = dev_proc_close,
-    .read       = dev_proc_read,
-    .llseek     = dev_proc_lseek,
-    .write      = dev_proc_write,
+    .open       = device_open,
+    .release    = device_close,
+    .read       = device_read,
+    .llseek     = device_lseek,
+    .write      = device_write,
 };
 

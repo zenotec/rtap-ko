@@ -15,30 +15,17 @@
 //    with this program; if not, write to the Free Software Foundation, Inc.,
 //    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
-//    File: device.h
-//    Description: 
+//    File: recv.h
+//    Description: Receives a packet from the device
 //
 //*****************************************************************************
 
-#ifndef __DEVICE_H__
-#define __DEVICE_H__
+#ifndef __RECV_H__
+#define __RECV_H__
 
 //*****************************************************************************
 // Type definitions
 //*****************************************************************************
-
-//*****************************************************************************
-// Global variables
-//*****************************************************************************
-
-extern const struct file_operations device_fops;
-
-//*****************************************************************************
-// Function prototypes
-//*****************************************************************************
-
-extern int device_init( void );
-extern int device_exit( void );
 
 
 #endif
