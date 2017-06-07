@@ -55,6 +55,9 @@ typedef enum filter_type
     FILTER_TYPE_ALL = 1,
     FILTER_TYPE_RADIOTAP = 2,
     FILTER_TYPE_80211_MAC = 3,
+    FILTER_TYPE_IP = 4,
+    FILTER_TYPE_UDP = 5,
+    FILTER_TYPE_TCP = 6,
     FILTER_TYPE_LAST
 } filter_type_t;
 
@@ -63,10 +66,11 @@ typedef enum filter_cmd
     FILTER_CMD_NONE = 0,
     FILTER_CMD_DROP = 1,
     FILTER_CMD_FWRD = 2,
+    FILTER_CMD_CNT  = 3,
     FILTER_CMD_LAST
 } filter_cmd_t;
 
-typedef enum rule_id
+typedef enum filter_subtype
 {
     RULE_ID_NONE = 0,
     RULE_ID_RTAP_DB = 1,
@@ -74,20 +78,27 @@ typedef enum rule_id
     RULE_ID_MAC_DA = 3,
     RULE_ID_MAC_FCTL = 4,
     RULE_ID_LAST
-} rule_id_t;
+} filter_subtype_t;
+
+typedef int (*filter_func)( struct sk_buff *skb );
 
 //*****************************************************************************
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations fltr_proc_fops;
+extern const struct file_operations filter_fops;
 
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
-extern int fltr_list_init( void );
-extern int fltr_list_exit( void );
+extern int filter_init( void );
+extern int filter_exit( void );
+
+extern int filter_register( filter_func func );
+extern int filter_unregister( filter_func func );
+
+extern int filter_recv( struct sk_buff *skb );
 
 #endif
 

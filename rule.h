@@ -24,17 +24,37 @@
 #ifndef __RULE_H__
 #define __RULE_H__
 
+#include "filter.h"
+
 //*****************************************************************************
 // Type definitions
 //*****************************************************************************
 
-typedef struct rule
-{
-    uint16_t id;
-    uint16_t cmd;
-    void *val;
-} rule_t;
+typedef uint32_t rule_id_t;
 
-extern rule_t ruletbl[];
+typedef enum rule_action
+{
+    ACTION_NONE = 0,
+    ACTION_DROP = 1,
+    ACTION_FWRD = 2,
+    ACTION_CNT  = 3,
+    ACTION_LAST
+} rule_action_t;
+
+//*****************************************************************************
+// Global variables
+//*****************************************************************************
+
+extern const struct file_operations rule_fops;
+
+//*****************************************************************************
+// Function prototypes
+//*****************************************************************************
+
+extern int
+rule_init( void );
+
+extern int
+rule_exit( void );
 
 #endif

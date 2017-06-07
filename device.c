@@ -30,7 +30,12 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 
+#include "filter.h"
 #include "device.h"
+
+//*****************************************************************************
+// Type definitions
+//*****************************************************************************
 
 typedef struct
 {
@@ -49,13 +54,13 @@ typedef struct
 /* Local */
 
 static device_t devices = { { 0 } };
-static void *dev_list_pktfunc = NULL;
 
 //*****************************************************************************
 // Functions
 //*****************************************************************************
 
 //*****************************************************************************
+
 static struct net_device *
 get_devbyname( const char *devname )
 {
@@ -76,6 +81,24 @@ get_devbyname( const char *devname )
 }
 
 //*****************************************************************************
+
+static int
+device_recv( struct sk_buff *skb, struct net_device *dev,
+             struct packet_type *pt, struct net_device *orig_dev )
+{
+
+    // Pass to filters
+    filter_recv( skb );
+
+    // Free frame
+    kfree_skb( skb );
+
+    // Return success
+    return( 0 );
+}
+
+//*****************************************************************************
+
 static int
 device_remove( const char *devname )
 {
@@ -104,6 +127,7 @@ device_remove( const char *devname )
 }
 
 //*****************************************************************************
+
 static struct net_device *
 device_add( const char *devname )
 {
@@ -111,7 +135,7 @@ device_add( const char *devname )
     struct net_device *netdev = 0;
 
     // First remove any existing devices with same name
-    dev_list_remove( devname );
+    device_remove( devname );
 
     // Lookup network device by given name
     netdev = get_devbyname( devname );
@@ -133,7 +157,7 @@ device_add( const char *devname )
     // Populate device list item
     dev->netdev = netdev;
     dev->pt.type = htons(ETH_P_ALL);
-    dev->pt.func = dev_list_pktfunc;
+    dev->pt.func = device_recv;
 
     // Add device list item to tail of device list
     spin_lock( &devices.lock );
@@ -142,6 +166,8 @@ device_add( const char *devname )
 
     // Register for packet
     dev_add_pack( &dev->pt );
+
+    printk( KERN_INFO "RTAP: Added device: %s\n", devname );
 
     // Return non-null network device pointer on success; null on error
     return( netdev );
@@ -245,21 +271,21 @@ device_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off
 
     if( (ret == 1) && (strlen(devname) == 1) && (devname[0] == '-') )
     {
-        dev_list_clear();
+        device_clear();
     } // end if
     else if( (ret == 1) && (strlen(devname) > 1) )
     {
         if( devname[0] == '-' )
         {
-            dev_list_remove( &devname[1] );
+            device_remove( &devname[1] );
         } // end if
         else if( devname[0] == '+' )
         {
-            dev_list_add( &devname[1] );
+            device_add( &devname[1] );
         } // end else
         else
         {
-            dev_list_add( devname );
+            device_add( devname );
         } // end else
     } // end else if
     else

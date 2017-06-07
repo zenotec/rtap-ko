@@ -59,37 +59,7 @@ static stats_t stats = { { 0 } };
 
 //*****************************************************************************
 int
-stats_list_add( const unsigned int fid )
-{
-    stats_t *s = 0;
-
-    // Remove any duplicates
-    stats_list_remove( fid );
-
-    // Allocate new statistics list item
-    s = kmalloc( sizeof(stats_t), GFP_ATOMIC );
-    if( ! s )
-    {
-        printk( KERN_CRIT "RTAP: Cannot allocate memory: stats[%u]\n", fid );
-        return( 0 );
-    } // end if
-    memset( (void *)s, 0, sizeof( stats_t ) );
-
-    // Initialize
-    s->fid = fid;
-
-    // Add statistics list item to tail of statistics list
-    spin_lock( &stats.lock );
-    list_add_tail( &s->list, &stats.list );
-    spin_unlock( &stats.lock );
-
-    // Return non-null on success, null on error
-    return( 1 );
-}
-
-//*****************************************************************************
-int
-stats_list_remove( const unsigned int fid )
+stats_remove( const unsigned int fid )
 {
     stats_t *s = 0;
     stats_t *tmp = 0;
@@ -115,8 +85,38 @@ stats_list_remove( const unsigned int fid )
 }
 
 //*****************************************************************************
+int
+stats_add( const unsigned int fid )
+{
+    stats_t *s = 0;
+
+    // Remove any duplicates
+    stats_remove( fid );
+
+    // Allocate new statistics list item
+    s = kmalloc( sizeof(stats_t), GFP_ATOMIC );
+    if( ! s )
+    {
+        printk( KERN_CRIT "RTAP: Cannot allocate memory: stats[%u]\n", fid );
+        return( 0 );
+    } // end if
+    memset( (void *)s, 0, sizeof( stats_t ) );
+
+    // Initialize
+    s->fid = fid;
+
+    // Add statistics list item to tail of statistics list
+    spin_lock( &stats.lock );
+    list_add_tail( &s->list, &stats.list );
+    spin_unlock( &stats.lock );
+
+    // Return non-null on success, null on error
+    return( 1 );
+}
+
+//*****************************************************************************
 static int
-stats_list_clear( void )
+stats_clear( void )
 {
     stats_t *s = 0;
     stats_t *tmp = 0;
@@ -136,7 +136,7 @@ stats_list_clear( void )
 
 //*****************************************************************************
 int
-stats_list_init( void )
+stats_init( void )
 {
     spin_lock_init( &stats.lock );
     INIT_LIST_HEAD( &stats.list );
@@ -145,9 +145,9 @@ stats_list_init( void )
 
 //*****************************************************************************
 int
-stats_list_exit( void )
+stats_exit( void )
 {
-    return( stats_list_clear() );
+    return( stats_clear() );
 }
 
 //*****************************************************************************

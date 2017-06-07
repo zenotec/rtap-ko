@@ -46,9 +46,11 @@ static int __init
 rtap_init( void )
 {
 
+    device_init();
     listener_init();
-    stats_list_init();
-    fltr_list_init();
+    stats_init();
+    rule_init();
+    filter_init();
     rtap_proc_init();
 
     printk( KERN_INFO "RTAP: Driver registered (%s)\n", DRIVER_VERSION );
@@ -63,9 +65,11 @@ rtap_exit( void )
 {
     printk( KERN_INFO "RTAP: Unloading module...\n" );
 
+    device_exit();
     listener_exit();
-    stats_list_exit();
-    fltr_list_exit();
+    stats_exit();
+    rule_exit();
+    filter_exit();
     rtap_proc_exit();
 
     printk( KERN_INFO "RTAP: ...done.\n" );

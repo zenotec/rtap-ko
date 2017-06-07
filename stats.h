@@ -31,23 +31,23 @@
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations stats_proc_fops;
+extern const struct file_operations stats_fops;
 
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
 extern int
-stats_list_init( void );
+stats_init( void );
 
 extern int
-stats_list_exit( void );
+stats_exit( void );
 
 extern int
-stats_list_add( const unsigned int fid );
+stats_add( const unsigned int fid );
 
 extern int
-stats_list_remove( const unsigned int fid );
+stats_remove( const unsigned int fid );
 
 extern int
 stats_forwarded( const unsigned int fid );

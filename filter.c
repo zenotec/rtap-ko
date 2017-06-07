@@ -43,7 +43,13 @@
 // Type definitions
 //*****************************************************************************
 
-typedef struct
+typedef struct chain
+{
+    struct list_head list;
+    spinlock_t lock;
+} chain_t;
+
+typedef struct filter
 {
     struct list_head list;
     spinlock_t lock;
@@ -87,15 +93,16 @@ static filter_t filters = { { 0 } }; // Dynamic filter list
 // Functions
 //*****************************************************************************
 
-//*****************************************************************************
-
-filter_t *
-fltr_list_recv( struct sk_buff *skb )
+int
+filter_recv( struct sk_buff *skb )
 {
 
     filter_t *f = 0;
     filter_t *filter = 0;
     filter_t *tmp = 0;
+
+
+    //printk( KERN_INFO "RTAP: Received\n" );
 
     // Loop through all filters
     spin_lock( &filters.lock );
@@ -109,22 +116,6 @@ fltr_list_recv( struct sk_buff *skb )
     } // end loop 
     spin_unlock( &filters.lock );
 
-    return( filter );
-}
-
-//*****************************************************************************
-
-int
-rtap_func( struct sk_buff *skb, struct net_device *dev,
-           struct packet_type *pt, struct net_device *orig_dev )
-{
-
-    filter_t *filter = 0;
-
-    //printk( KERN_INFO "RTAP: Received\n" );
-
-    // Run through filters
-    filter = fltr_list_recv( skb );
     if( filter )
     {
         // Check if forward command was given
@@ -294,7 +285,7 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
 //*****************************************************************************
 
 static int
-fltr_list_remove( filter_id_t fid )
+filter_remove( filter_id_t fid )
 {
     filter_t *filter = 0;
     filter_t *tmp = 0;
@@ -308,7 +299,7 @@ fltr_list_remove( filter_id_t fid )
         {
             printk( KERN_INFO "RTAP: Removing filter: %d\n", fid );
             // Add filter statistics entry
-            stats_list_add( fid );
+            stats_remove( fid );
             // Remove filter from list
             list_del( &filter->list );
             kfree( filter->arg );
@@ -326,13 +317,13 @@ fltr_list_remove( filter_id_t fid )
 //*****************************************************************************
 
 static int
-fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
+filter_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
                  filter_cmd_t cmd, char *arg )
 {
     filter_t *filter = 0;
 
     // Remove any duplicate filters
-    fltr_list_remove( fid );
+    filter_remove( fid );
 
     // Validate filter type
     if( (type <= FILTER_TYPE_NONE) || (type >= FILTER_TYPE_LAST) )
@@ -375,7 +366,7 @@ fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
             fid, filter_type_str(type), filter_cmd_str(cmd), arg );
 
     // Add filter statistics entry
-    stats_list_add( fid );
+    stats_add( fid );
 
     // Add filter list item to tail of device list
     spin_lock( &filters.lock );
@@ -389,7 +380,7 @@ fltr_list_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
 //*****************************************************************************
 
 static int
-fltr_list_clear( void )
+filter_clear( void )
 {
     filter_t *filter = 0;
     filter_t *tmp = 0;
@@ -411,28 +402,26 @@ fltr_list_clear( void )
 //*****************************************************************************
 
 int
-fltr_list_init( void )
+filter_init( void )
 {
     spin_lock_init( &filters.lock );
     INIT_LIST_HEAD( &filters.list );
-    dev_list_init( rtap_func );
     return( 0 );
 }
 
 //*****************************************************************************
 
 int
-fltr_list_exit( void )
+filter_exit( void )
 {
-    dev_list_exit();
-    return( fltr_list_clear() );
+    return( filter_clear() );
 }
 
 //*****************************************************************************
 //*****************************************************************************
 
 static int
-fltr_proc_show( struct seq_file *file, void *arg )
+filter_show( struct seq_file *file, void *arg )
 {
     filter_t *filter = 0;
     filter_t *tmp = 0;
@@ -452,15 +441,15 @@ fltr_proc_show( struct seq_file *file, void *arg )
 //*****************************************************************************
 
 static int
-fltr_proc_open( struct inode *inode, struct file *file )
+filter_open( struct inode *inode, struct file *file )
 {
-    return( single_open( file, fltr_proc_show, NULL ) );
+    return( single_open( file, filter_show, NULL ) );
 }
 
 //*****************************************************************************
 
 static int
-fltr_proc_close( struct inode *inode, struct file *file )
+filter_close( struct inode *inode, struct file *file )
 {
     return( single_release( inode, file ) );
 }
@@ -468,7 +457,7 @@ fltr_proc_close( struct inode *inode, struct file *file )
 //*****************************************************************************
 
 static ssize_t
-fltr_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+filter_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 {
     return( seq_read( file, buf, cnt, off ) );
 }
@@ -476,7 +465,7 @@ fltr_proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 //*****************************************************************************
 
 static loff_t
-fltr_proc_lseek( struct file *file, loff_t off, int cnt )
+filter_lseek( struct file *file, loff_t off, int cnt )
 {
     return( seq_lseek( file, off, cnt ) );
 }
@@ -484,7 +473,7 @@ fltr_proc_lseek( struct file *file, loff_t off, int cnt )
 //*****************************************************************************
 
 static ssize_t
-fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
     char fltrstr[256+1] = { 0 };
     int fid; // filter id
@@ -496,7 +485,7 @@ fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *
 
     if( ! cnt )
     {
-        fltr_list_clear();
+        filter_clear();
         return( cnt );
     } // end if
 
@@ -515,15 +504,15 @@ fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *
 
     if( (ret == 0) && (strlen(fltrstr) == 1) && (fltrstr[0] == '-') )
     {
-        fltr_list_clear();
+        filter_clear();
     } // end if
     else if( (ret == 5) && (fid > 0) )
     {
-        fltr_list_add( fid, type, rid, cmd, str );
+        filter_add( fid, type, rid, cmd, str );
     } // end else if
     else if( (ret == 1) && (fid < 0) )
     {
-        fltr_list_remove( -fid );
+        filter_remove( -fid );
     } // end if
     else
     {
@@ -537,13 +526,13 @@ fltr_proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *
 
 //*****************************************************************************
 //*****************************************************************************
-const struct file_operations fltr_proc_fops =
+const struct file_operations filter_fops =
 {
     .owner      = THIS_MODULE,
-    .open       = fltr_proc_open,
-    .release    = fltr_proc_close,
-    .read       = fltr_proc_read,
-    .llseek     = fltr_proc_lseek,
-    .write      = fltr_proc_write,
+    .open       = filter_open,
+    .release    = filter_close,
+    .read       = filter_read,
+    .llseek     = filter_lseek,
+    .write      = filter_write,
 };
 
