@@ -15,7 +15,7 @@
 //    with this program; if not, write to the Free Software Foundation, Inc.,
 //    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
-//    File: filter.c
+//    File: rtap_filter.c
 //    Description:  Filters specific to a group of rules.
 //
 //*****************************************************************************
@@ -49,26 +49,26 @@ typedef struct chain
     spinlock_t lock;
 } chain_t;
 
-typedef struct filter
+typedef struct rtap_filter
 {
     struct list_head list;
     spinlock_t lock;
-    filter_id_t fid;
-    filter_type_t type;
-    filter_cmd_t cmd;
-    rule_id_t rid;
+    rtap_filter_id_t fid;
+    rtap_filter_type_t type;
+    rtap_filter_cmd_t cmd;
+    rtap_rule_id_t rid;
     char *arg;
-} filter_t;
+} rtap_filter_t;
 
-typedef filter_cmd_t (*filter_func_t)( filter_t *fp, struct sk_buff *skb );
+typedef rtap_filter_cmd_t (*rtap_filter_func_t)( rtap_filter_t *fp, struct sk_buff *skb );
 
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
-filter_cmd_t rtap_filter_all( filter_t *fp, struct sk_buff *skb );
-filter_cmd_t rtap_filter_radiotap( filter_t *fp, struct sk_buff *skb );
-filter_cmd_t rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb );
+rtap_filter_cmd_t rtap_rtap_filter_all( rtap_filter_t *fp, struct sk_buff *skb );
+rtap_filter_cmd_t rtap_rtap_filter_radiotap( rtap_filter_t *fp, struct sk_buff *skb );
+rtap_filter_cmd_t rtap_rtap_filter_80211_mac( rtap_filter_t *fp, struct sk_buff *skb );
 
 //*****************************************************************************
 // Variables
@@ -78,59 +78,59 @@ filter_cmd_t rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb );
 
 /* Local */
 
-static filter_func_t filtertbl[] =
+static rtap_filter_func_t rtap_filtertbl[] =
 {
     [FILTER_TYPE_NONE] = NULL,
-    [FILTER_TYPE_ALL] = &rtap_filter_all,
-    [FILTER_TYPE_RADIOTAP] = &rtap_filter_radiotap,
-    [FILTER_TYPE_80211_MAC] = &rtap_filter_80211_mac,
+    [FILTER_TYPE_ALL] = &rtap_rtap_filter_all,
+    [FILTER_TYPE_RADIOTAP] = &rtap_rtap_filter_radiotap,
+    [FILTER_TYPE_80211_MAC] = &rtap_rtap_filter_80211_mac,
     [FILTER_TYPE_LAST] = NULL
 };
 
-static filter_t filters = { { 0 } }; // Dynamic filter list
+static rtap_filter_t rtap_filters = { { 0 } }; // Dynamic rtap_filter list
 
 //*****************************************************************************
 // Functions
 //*****************************************************************************
 
 int
-filter_recv( struct sk_buff *skb )
+rtap_filter_recv( struct sk_buff *skb )
 {
 
-    filter_t *f = 0;
-    filter_t *filter = 0;
-    filter_t *tmp = 0;
+    rtap_filter_t *f = 0;
+    rtap_filter_t *rtap_filter = 0;
+    rtap_filter_t *tmp = 0;
 
 
     //printk( KERN_INFO "RTAP: Received\n" );
 
-    // Loop through all filters
-    spin_lock( &filters.lock );
-    list_for_each_entry_safe( f, tmp, &filters.list, list )
+    // Loop through all rtap_filters
+    spin_lock( &rtap_filters.lock );
+    list_for_each_entry_safe( f, tmp, &rtap_filters.list, list )
     {
-        if( filtertbl[f->type]( f, skb ) != FILTER_CMD_NONE )
+        if( rtap_filtertbl[f->type]( f, skb ) != FILTER_CMD_NONE )
         {
-            filter = f;
+            rtap_filter = f;
             break;
         } // end if
     } // end loop 
-    spin_unlock( &filters.lock );
+    spin_unlock( &rtap_filters.lock );
 
-    if( filter )
+    if( rtap_filter )
     {
         // Check if forward command was given
-        switch( filter->cmd )
+        switch( rtap_filter->cmd )
         {    
             case FILTER_CMD_FWRD:
                 printk( KERN_INFO "RTAP: Forwarding\n" );
-                // Update filter statistics
-                stats_forwarded( filter->fid );
-                listener_send( skb );
+                // Update rtap_filter statistics
+                stats_forwarded( rtap_filter->fid );
+                //listener_send( skb );
                 break;
             case FILTER_CMD_DROP:
                 printk( KERN_INFO "RTAP: Dropping\n" );
-                // Update filter statistics
-                stats_dropped( filter->fid );
+                // Update rtap_filter statistics
+                stats_dropped( rtap_filter->fid );
             case FILTER_CMD_NONE:
                 break;
             default:
@@ -153,7 +153,7 @@ filter_recv( struct sk_buff *skb )
 //*****************************************************************************
 //*****************************************************************************
 
-static const char *filter_type_str( filter_type_t type )
+static const char *rtap_filter_type_str( rtap_filter_type_t type )
 {
     const char *str = 0;
     switch( type )
@@ -179,7 +179,7 @@ static const char *filter_type_str( filter_type_t type )
 
 //*****************************************************************************
 
-static const char *filter_cmd_str( filter_cmd_t cmd )
+static const char *rtap_filter_cmd_str( rtap_filter_cmd_t cmd )
 {
     const char *str = 0;
     switch( cmd )
@@ -200,19 +200,19 @@ static const char *filter_cmd_str( filter_cmd_t cmd )
 //*****************************************************************************
 //*****************************************************************************
 
-filter_cmd_t
-rtap_filter_all( filter_t *fp, struct sk_buff *skb )
+rtap_filter_cmd_t
+rtap_rtap_filter_all( rtap_filter_t *fp, struct sk_buff *skb )
 {
-    printk( KERN_INFO "RTAP: filter_all: %d\n", fp->cmd );
+    printk( KERN_INFO "RTAP: rtap_filter_all: %d\n", fp->cmd );
     return( fp->cmd );
 }
 
 //*****************************************************************************
 
-filter_cmd_t
-rtap_filter_radiotap( filter_t *fp, struct sk_buff *skb )
+rtap_filter_cmd_t
+rtap_rtap_filter_radiotap( rtap_filter_t *fp, struct sk_buff *skb )
 {
-    filter_cmd_t ret_cmd = FILTER_CMD_NONE;
+    rtap_filter_cmd_t ret_cmd = FILTER_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)skb->data;
     if ( rthdr ); // TODO: Implement
     switch( fp->rid )
@@ -225,10 +225,10 @@ rtap_filter_radiotap( filter_t *fp, struct sk_buff *skb )
 
 //*****************************************************************************
 
-filter_cmd_t
-rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
+rtap_filter_cmd_t
+rtap_rtap_filter_80211_mac( rtap_filter_t *fp, struct sk_buff *skb )
 {
-    filter_cmd_t ret_cmd = FILTER_CMD_NONE;
+    rtap_filter_cmd_t ret_cmd = FILTER_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr =
         (struct ieee80211_radiotap_header *)skb->data;
     struct ieee80211_hdr *fhdr =
@@ -285,30 +285,30 @@ rtap_filter_80211_mac( filter_t *fp, struct sk_buff *skb )
 //*****************************************************************************
 
 static int
-filter_remove( filter_id_t fid )
+rtap_filter_remove( rtap_filter_id_t fid )
 {
-    filter_t *filter = 0;
-    filter_t *tmp = 0;
+    rtap_filter_t *rtap_filter = 0;
+    rtap_filter_t *tmp = 0;
     int ret = -1;
 
     // Search for device in list and remove
-    spin_lock( &filters.lock );
-    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    spin_lock( &rtap_filters.lock );
+    list_for_each_entry_safe( rtap_filter, tmp, &rtap_filters.list, list )
     {
-        if( filter->fid == fid )
+        if( rtap_filter->fid == fid )
         {
-            printk( KERN_INFO "RTAP: Removing filter: %d\n", fid );
-            // Add filter statistics entry
+            printk( KERN_INFO "RTAP: Removing rtap_filter: %d\n", fid );
+            // Add rtap_filter statistics entry
             stats_remove( fid );
-            // Remove filter from list
-            list_del( &filter->list );
-            kfree( filter->arg );
-            kfree( filter );
+            // Remove rtap_filter from list
+            list_del( &rtap_filter->list );
+            kfree( rtap_filter->arg );
+            kfree( rtap_filter );
             ret = 0;
             break;
         } // end if
     } // end loop 
-    spin_unlock( &filters.lock );
+    spin_unlock( &rtap_filters.lock );
 
     // Return non-null network device pointer on success; null on error
     return( ret );
@@ -317,15 +317,15 @@ filter_remove( filter_id_t fid )
 //*****************************************************************************
 
 static int
-filter_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
-                 filter_cmd_t cmd, char *arg )
+rtap_filter_add( rtap_filter_id_t fid, rtap_filter_type_t type,
+                 rtap_rule_id_t rid, rtap_filter_cmd_t cmd, char *arg )
 {
-    filter_t *filter = 0;
+    rtap_filter_t *rtap_filter = 0;
 
-    // Remove any duplicate filters
-    filter_remove( fid );
+    // Remove any duplicate rtap_filters
+    rtap_filter_remove( fid );
 
-    // Validate filter type
+    // Validate rtap_filter type
     if( (type <= FILTER_TYPE_NONE) || (type >= FILTER_TYPE_LAST) )
     {
         printk( KERN_ERR "RTAP: Filter type %d not supported\n", type );
@@ -339,39 +339,39 @@ filter_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
         return( -1 );
     } // end if
 
-    // Validate filter command
+    // Validate rtap_filter command
     if( (cmd <= FILTER_CMD_NONE) || (cmd >= FILTER_CMD_LAST) )
     {
         printk( KERN_ERR "RTAP: Filter command %d not supported\n", cmd );
         return( -1 );
     } // end if
 
-    // Allocate new filter list item
-    filter = kmalloc( sizeof(filter_t), GFP_ATOMIC );
-    if( ! filter )
+    // Allocate new rtap_filter list item
+    rtap_filter = kmalloc( sizeof(rtap_filter_t), GFP_ATOMIC );
+    if( ! rtap_filter )
     {
         printk( KERN_CRIT "RTAP: Cannot allocate memory\n" );
         return( -1 );
     } // end if
-    memset( (void *)filter, 0, sizeof( filter_t ) );
+    memset( (void *)rtap_filter, 0, sizeof( rtap_filter_t ) );
 
-    // Populate filter list item
-    filter->fid = fid;
-    filter->type = type;
-    filter->cmd = cmd;
-    filter->rid = rid;
-    filter->arg = arg;
+    // Populate rtap_filter list item
+    rtap_filter->fid = fid;
+    rtap_filter->type = type;
+    rtap_filter->cmd = cmd;
+    rtap_filter->rid = rid;
+    rtap_filter->arg = arg;
 
-    printk( KERN_INFO "RTAP: Adding filter: #%d Type[%s] Cmd[%s] Arg: %s\n",
-            fid, filter_type_str(type), filter_cmd_str(cmd), arg );
+    printk( KERN_INFO "RTAP: Adding rtap_filter: #%d Type[%s] Cmd[%s] Arg: %s\n",
+            fid, rtap_filter_type_str(type), rtap_filter_cmd_str(cmd), arg );
 
-    // Add filter statistics entry
+    // Add rtap_filter statistics entry
     stats_add( fid );
 
-    // Add filter list item to tail of device list
-    spin_lock( &filters.lock );
-    list_add_tail( &filter->list, &filters.list );
-    spin_unlock( &filters.lock );
+    // Add rtap_filter list item to tail of device list
+    spin_lock( &rtap_filters.lock );
+    list_add_tail( &rtap_filter->list, &rtap_filters.list );
+    spin_unlock( &rtap_filters.lock );
 
     // Return non-null network device pointer on success; null on error
     return( 0 );
@@ -380,21 +380,21 @@ filter_add( filter_id_t fid, filter_type_t type, rule_id_t rid,
 //*****************************************************************************
 
 static int
-filter_clear( void )
+rtap_filter_clear( void )
 {
-    filter_t *filter = 0;
-    filter_t *tmp = 0;
+    rtap_filter_t *rtap_filter = 0;
+    rtap_filter_t *tmp = 0;
 
-    // Remove all filters from list
-    spin_lock( &filters.lock );
-    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    // Remove all rtap_filters from list
+    spin_lock( &rtap_filters.lock );
+    list_for_each_entry_safe( rtap_filter, tmp, &rtap_filters.list, list )
     {
-        printk( KERN_INFO "RTAP: Removing filter: %d\n", filter->fid );
-        list_del( &filter->list );
-        kfree( filter->arg );
-        kfree( filter );
+        printk( KERN_INFO "RTAP: Removing rtap_filter: %d\n", rtap_filter->fid );
+        list_del( &rtap_filter->list );
+        kfree( rtap_filter->arg );
+        kfree( rtap_filter );
     } // end loop 
-    spin_unlock( &filters.lock );
+    spin_unlock( &rtap_filters.lock );
 
     return( 0 );
 }
@@ -402,38 +402,38 @@ filter_clear( void )
 //*****************************************************************************
 
 int
-filter_init( void )
+rtap_filter_init( void )
 {
-    spin_lock_init( &filters.lock );
-    INIT_LIST_HEAD( &filters.list );
+    spin_lock_init( &rtap_filters.lock );
+    INIT_LIST_HEAD( &rtap_filters.list );
     return( 0 );
 }
 
 //*****************************************************************************
 
 int
-filter_exit( void )
+rtap_filter_exit( void )
 {
-    return( filter_clear() );
+    return( rtap_filter_clear() );
 }
 
 //*****************************************************************************
 //*****************************************************************************
 
 static int
-filter_show( struct seq_file *file, void *arg )
+rtap_filter_show( struct seq_file *file, void *arg )
 {
-    filter_t *filter = 0;
-    filter_t *tmp = 0;
+    rtap_filter_t *rtap_filter = 0;
+    rtap_filter_t *tmp = 0;
 
-    // Iterate over all filters in list
-    spin_lock( &filters.lock );
-    list_for_each_entry_safe( filter, tmp, &filters.list, list )
+    // Iterate over all rtap_filters in list
+    spin_lock( &rtap_filters.lock );
+    list_for_each_entry_safe( rtap_filter, tmp, &rtap_filters.list, list )
     {
         seq_printf( file, "%d\tFilter Type[%d]\tRule[%d]\tCmd[%d]\tArg: %s\n",
-         filter->fid, filter->type, filter->rid, filter->cmd, filter->arg );
+         rtap_filter->fid, rtap_filter->type, rtap_filter->rid, rtap_filter->cmd, rtap_filter->arg );
     } // end loop 
-    spin_unlock( &filters.lock );
+    spin_unlock( &rtap_filters.lock );
 
     return( 0 );
 }
@@ -441,15 +441,15 @@ filter_show( struct seq_file *file, void *arg )
 //*****************************************************************************
 
 static int
-filter_open( struct inode *inode, struct file *file )
+rtap_filter_open( struct inode *inode, struct file *file )
 {
-    return( single_open( file, filter_show, NULL ) );
+    return( single_open( file, rtap_filter_show, NULL ) );
 }
 
 //*****************************************************************************
 
 static int
-filter_close( struct inode *inode, struct file *file )
+rtap_filter_close( struct inode *inode, struct file *file )
 {
     return( single_release( inode, file ) );
 }
@@ -457,7 +457,7 @@ filter_close( struct inode *inode, struct file *file )
 //*****************************************************************************
 
 static ssize_t
-filter_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+rtap_filter_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 {
     return( seq_read( file, buf, cnt, off ) );
 }
@@ -465,7 +465,7 @@ filter_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 //*****************************************************************************
 
 static loff_t
-filter_lseek( struct file *file, loff_t off, int cnt )
+rtap_filter_lseek( struct file *file, loff_t off, int cnt )
 {
     return( seq_lseek( file, off, cnt ) );
 }
@@ -473,23 +473,23 @@ filter_lseek( struct file *file, loff_t off, int cnt )
 //*****************************************************************************
 
 static ssize_t
-filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+rtap_filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
     char fltrstr[256+1] = { 0 };
-    int fid; // filter id
-    int type; // filter type
-    int cmd; // filter cmd
+    int fid; // rtap_filter id
+    int type; // rtap_filter type
+    int cmd; // rtap_filter cmd
     int rid; // rule id
-    char *str; // filter argument string
+    char *str; // rtap_filter argument string
     int ret = 0;
 
     if( ! cnt )
     {
-        filter_clear();
+        rtap_filter_clear();
         return( cnt );
     } // end if
 
-    // Allocate new filter list item
+    // Allocate new rtap_filter list item
     str = kmalloc( 256+1, GFP_ATOMIC );
     if( ! str )
     {
@@ -504,19 +504,19 @@ filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off
 
     if( (ret == 0) && (strlen(fltrstr) == 1) && (fltrstr[0] == '-') )
     {
-        filter_clear();
+        rtap_filter_clear();
     } // end if
     else if( (ret == 5) && (fid > 0) )
     {
-        filter_add( fid, type, rid, cmd, str );
+        rtap_filter_add( fid, type, rid, cmd, str );
     } // end else if
     else if( (ret == 1) && (fid < 0) )
     {
-        filter_remove( -fid );
+        rtap_filter_remove( -fid );
     } // end if
     else
     {
-        printk( KERN_ERR "RTAP: Failed parsing filter string: %s\n", fltrstr );
+        printk( KERN_ERR "RTAP: Failed parsing rtap_filter string: %s\n", fltrstr );
         return( -1 );
     } // end else
 
@@ -526,13 +526,13 @@ filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off
 
 //*****************************************************************************
 //*****************************************************************************
-const struct file_operations filter_fops =
+const struct file_operations rtap_filter_fops =
 {
     .owner      = THIS_MODULE,
-    .open       = filter_open,
-    .release    = filter_close,
-    .read       = filter_read,
-    .llseek     = filter_lseek,
-    .write      = filter_write,
+    .open       = rtap_filter_open,
+    .release    = rtap_filter_close,
+    .read       = rtap_filter_read,
+    .llseek     = rtap_filter_lseek,
+    .write      = rtap_filter_write,
 };
 

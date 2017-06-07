@@ -24,37 +24,37 @@
 #ifndef __RULE_H__
 #define __RULE_H__
 
-#include "filter.h"
-
 //*****************************************************************************
 // Type definitions
 //*****************************************************************************
 
-typedef uint32_t rule_id_t;
+typedef uint32_t rtap_rule_id_t;
 
-typedef enum rule_action
+typedef enum rtap_rule_action
 {
     ACTION_NONE = 0,
     ACTION_DROP = 1,
     ACTION_FWRD = 2,
     ACTION_CNT  = 3,
     ACTION_LAST
-} rule_action_t;
+} rtap_rule_action_t;
+
+struct rtap_rule;
 
 //*****************************************************************************
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations rule_fops;
+extern const struct file_operations rtap_rule_fops;
 
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
 extern int
-rule_init( void );
+rtap_rule_init( void );
 
 extern int
-rule_exit( void );
+rtap_rule_exit( void );
 
 #endif

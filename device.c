@@ -37,13 +37,13 @@
 // Type definitions
 //*****************************************************************************
 
-typedef struct
+typedef struct rtap_device
 {
     struct list_head list;
     spinlock_t lock;
     struct net_device *netdev;
     struct packet_type pt;
-} device_t;
+} rtap_device_t;
 
 //*****************************************************************************
 // Variables
@@ -53,7 +53,7 @@ typedef struct
 
 /* Local */
 
-static device_t devices = { { 0 } };
+static rtap_device_t rtap_devices = { { 0 } };
 
 //*****************************************************************************
 // Functions
@@ -83,12 +83,12 @@ get_devbyname( const char *devname )
 //*****************************************************************************
 
 static int
-device_recv( struct sk_buff *skb, struct net_device *dev,
-             struct packet_type *pt, struct net_device *orig_dev )
+rtap_device_recv( struct sk_buff *skb, struct net_device *dev,
+                  struct packet_type *pt, struct net_device *orig_dev )
 {
 
     // Pass to filters
-    filter_recv( skb );
+    rtap_filter_recv( skb );
 
     // Free frame
     kfree_skb( skb );
@@ -100,15 +100,15 @@ device_recv( struct sk_buff *skb, struct net_device *dev,
 //*****************************************************************************
 
 static int
-device_remove( const char *devname )
+rtap_device_remove( const char *devname )
 {
-    device_t *dev = 0;
-    device_t *tmp = 0;
+    rtap_device_t *dev = 0;
+    rtap_device_t *tmp = 0;
     int ret = -1;
 
     // Search for device in list and remove
-    spin_lock( &devices.lock );
-    list_for_each_entry_safe( dev, tmp, &devices.list, list )
+    spin_lock( &rtap_devices.lock );
+    list_for_each_entry_safe( dev, tmp, &rtap_devices.list, list )
     {
         if( ! strcmp( dev->netdev->name, devname ) )
         {
@@ -120,7 +120,7 @@ device_remove( const char *devname )
             break;
         } // end if
     } // end loop 
-    spin_unlock( &devices.lock );
+    spin_unlock( &rtap_devices.lock );
 
     // Return non-null network device pointer on success; null on error
     return( ret );
@@ -129,13 +129,13 @@ device_remove( const char *devname )
 //*****************************************************************************
 
 static struct net_device *
-device_add( const char *devname )
+rtap_device_add( const char *devname )
 {
-    device_t *dev = 0;
+    rtap_device_t *dev = 0;
     struct net_device *netdev = 0;
 
     // First remove any existing devices with same name
-    device_remove( devname );
+    rtap_device_remove( devname );
 
     // Lookup network device by given name
     netdev = get_devbyname( devname );
@@ -146,23 +146,23 @@ device_add( const char *devname )
     } // end if
 
     // Allocate new device list item
-    dev = kmalloc( sizeof(device_t), GFP_ATOMIC );
+    dev = kmalloc( sizeof(rtap_device_t), GFP_ATOMIC );
     if( ! dev )
     {
         printk( KERN_CRIT "RTAP: Cannot allocate memory: dev[%s]\n", devname );
         return( 0 );
     } // end if
-    memset( (void *)dev, 0, sizeof( device_t ) );
+    memset( (void *)dev, 0, sizeof( rtap_device_t ) );
 
     // Populate device list item
     dev->netdev = netdev;
     dev->pt.type = htons(ETH_P_ALL);
-    dev->pt.func = device_recv;
+    dev->pt.func = rtap_device_recv;
 
     // Add device list item to tail of device list
-    spin_lock( &devices.lock );
-    list_add_tail( &dev->list, &devices.list );
-    spin_unlock( &devices.lock );
+    spin_lock( &rtap_devices.lock );
+    list_add_tail( &dev->list, &rtap_devices.list );
+    spin_unlock( &rtap_devices.lock );
 
     // Register for packet
     dev_add_pack( &dev->pt );
@@ -175,91 +175,91 @@ device_add( const char *devname )
 
 //*****************************************************************************
 static int
-device_clear( void )
+rtap_device_clear( void )
 {
-    device_t *dev = 0;
-    device_t *tmp = 0;
+    rtap_device_t *dev = 0;
+    rtap_device_t *tmp = 0;
 
     // Remove all devices from list
-    spin_lock( &devices.lock );
-    list_for_each_entry_safe( dev, tmp, &devices.list, list )
+    spin_lock( &rtap_devices.lock );
+    list_for_each_entry_safe( dev, tmp, &rtap_devices.list, list )
     {
         printk( KERN_INFO "RTAP: Removing device: %s\n", dev->netdev->name );
         dev_remove_pack( &dev->pt );
         list_del( &dev->list );
         kfree( dev );
     } // end loop 
-    spin_unlock( &devices.lock );
+    spin_unlock( &rtap_devices.lock );
 
     return( 0 );
 }
 
 //*****************************************************************************
 int
-device_init( void *func )
+rtap_device_init( void )
 {
-    spin_lock_init( &devices.lock );
-    INIT_LIST_HEAD( &devices.list );
+    spin_lock_init( &rtap_devices.lock );
+    INIT_LIST_HEAD( &rtap_devices.list );
     return( 0 );
 }
 
 //*****************************************************************************
 int
-device_exit( void )
+rtap_device_exit( void )
 {
-    return( device_clear() );
+    return( rtap_device_clear() );
 }
 
 //*****************************************************************************
 //*****************************************************************************
 static int
-device_show( struct seq_file *file, void *arg )
+rtap_device_show( struct seq_file *file, void *arg )
 {
-    device_t *dev = 0;
-    device_t *tmp = 0;
+    rtap_device_t *dev = 0;
+    rtap_device_t *tmp = 0;
 
     // Iterate over all devices in list
-    spin_lock( &devices.lock );
-    list_for_each_entry_safe( dev, tmp, &devices.list, list )
+    spin_lock( &rtap_devices.lock );
+    list_for_each_entry_safe( dev, tmp, &rtap_devices.list, list )
     {
         seq_printf( file, "dev[%s]\n", dev->netdev->name );
     } // end loop 
-    spin_unlock( &devices.lock );
+    spin_unlock( &rtap_devices.lock );
 
     return( 0 );
 }
 
 //*****************************************************************************
 static int
-device_open( struct inode *inode, struct file *file )
+rtap_device_open( struct inode *inode, struct file *file )
 {
-    return( single_open( file, device_show, NULL ) );
+    return( single_open( file, rtap_device_show, NULL ) );
 }
 
 //*****************************************************************************
 static int
-device_close( struct inode *inode, struct file *file )
+rtap_device_close( struct inode *inode, struct file *file )
 {
     return( single_release( inode, file ) );
 }
 
 //*****************************************************************************
 static ssize_t
-device_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+rtap_device_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 {
     return( seq_read( file, buf, cnt, off ) );
 }
 
 //*****************************************************************************
 static loff_t
-device_lseek( struct file *file, loff_t off, int cnt )
+rtap_device_lseek( struct file *file, loff_t off, int cnt )
 {
     return( seq_lseek( file, off, cnt ) );
 }
 
 //*****************************************************************************
 static ssize_t
-device_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+rtap_device_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
     char devstr[256+1] = { 0 };
     char devname[256+1] = { 0 };
@@ -271,21 +271,21 @@ device_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off
 
     if( (ret == 1) && (strlen(devname) == 1) && (devname[0] == '-') )
     {
-        device_clear();
+        rtap_device_clear();
     } // end if
     else if( (ret == 1) && (strlen(devname) > 1) )
     {
         if( devname[0] == '-' )
         {
-            device_remove( &devname[1] );
+            rtap_device_remove( &devname[1] );
         } // end if
         else if( devname[0] == '+' )
         {
-            device_add( &devname[1] );
+            rtap_device_add( &devname[1] );
         } // end else
         else
         {
-            device_add( devname );
+            rtap_device_add( devname );
         } // end else
     } // end else if
     else
@@ -300,13 +300,13 @@ device_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off
 
 //*****************************************************************************
 //*****************************************************************************
-const struct file_operations device_fops =
+const struct file_operations rtap_device_fops =
 {
     .owner      = THIS_MODULE,
-    .open       = device_open,
-    .release    = device_close,
-    .read       = device_read,
-    .llseek     = device_lseek,
-    .write      = device_write,
+    .open       = rtap_device_open,
+    .release    = rtap_device_close,
+    .read       = rtap_device_read,
+    .llseek     = rtap_device_lseek,
+    .write      = rtap_device_write,
 };
 

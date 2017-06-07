@@ -31,14 +31,14 @@
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations device_fops;
+extern const struct file_operations rtap_device_fops;
 
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
-extern int device_init( void );
-extern int device_exit( void );
+extern int rtap_device_init( void );
+extern int rtap_device_exit( void );
 
 
 #endif

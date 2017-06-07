@@ -36,11 +36,15 @@
 // Type definitions
 //*****************************************************************************
 
+typedef uint32_t rtap_listener_id_t;
+
+struct rtap_listener;
+
 //*****************************************************************************
 // Global variables
 //*****************************************************************************
 
-extern const struct file_operations listener_proc_fops;
+extern const struct file_operations listener_fops;
 
 //*****************************************************************************
 // Function prototypes
@@ -48,6 +52,6 @@ extern const struct file_operations listener_proc_fops;
 
 extern int listener_init( void );
 extern int listener_exit( void );
-extern int listener_send( struct sk_buff *skb );
+extern int listener_send( struct rtap_listener* l, struct sk_buff *skb );
 
 #endif
