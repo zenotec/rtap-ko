@@ -51,12 +51,6 @@ typedef struct rtap_rule
     void *arg;
 } rtap_rule_t;
 
-typedef struct rtap_rule_forward_wrk
-{
-    rtap_listener_id_t lid;
-    struct rtap_listener* listener;
-} rtap_rule_forward_wrk;
-
 //*****************************************************************************
 // Global variables
 //*****************************************************************************
@@ -100,7 +94,7 @@ rtap_rule_action_drop( struct rtap_rule* r, struct sk_buff *skb )
 static int
 rtap_rule_action_forward( struct rtap_rule* r, struct sk_buff *skb )
 {
-    struct rtap_rule_forward_wrk* wrk = (struct rtap_rule_forward_wrk*)r->arg;
+    struct rtap_listener* l = (struct rtap_listener*)r->arg;
     if( r->aid != ACTION_FWRD )
     {
         return( 0 );
@@ -108,7 +102,7 @@ rtap_rule_action_forward( struct rtap_rule* r, struct sk_buff *skb )
   
     printk( KERN_INFO "RTAP: Forward action rule\n" );
 
-    listener_send( wrk->listener, skb );
+    listener_send( l, skb );
 
     return( 1 );
 }
@@ -142,8 +136,6 @@ rtap_rule_remove( const rtap_rule_id_t rid )
         {
             printk( KERN_INFO "RTAP: Removing filter statistics: %u\n", rid );
             list_del( &r->list );
-            if( r->arg )
-                kfree( r->arg );
             kfree( r );
             ret = 0;
             break;
@@ -187,11 +179,13 @@ rtap_rule_add( rtap_rule_id_t rid, rtap_rule_action_t aid, void* arg )
             break;
         case ACTION_FWRD:
             r->func = rtap_rule_action_forward;
-            r->arg = kmalloc( sizeof(struct rtap_rule_forward_wrk), GFP_ATOMIC );
-            if( r->arg )
+            r->arg = (void*)listener_findbyid( *(unsigned int*)arg );
+            if( ! r->arg )
             {
-                memset( r->arg, 0, sizeof(struct rtap_rule_forward_wrk) );
-                ((struct rtap_rule_forward_wrk*)r->arg)->lid = *(unsigned int*)arg;
+                printk( KERN_ERR "RTAP: Cannot find listener identifier: %u\n",
+                        *(unsigned int*)arg );
+                kfree( r );
+                return( 0 );
             }
             break;
         case ACTION_CNT:
@@ -277,6 +271,30 @@ static const char *rtap_rule_action_str( struct rtap_rule* r )
 
 //*****************************************************************************
 
+static const char *rtap_rule_arg_str( struct rtap_rule* r )
+{
+    char str[24 + 1] = { 0 };
+    switch( r->aid )
+    {
+        case ACTION_NONE:
+        case ACTION_DROP:
+            break;
+        case ACTION_FWRD:
+            snprintf( str, sizeof(str), " -> %16s:%hu",
+                      listener_ipaddr((struct rtap_listener*)r->arg),
+                      listener_port((struct rtap_listener*)r->arg) );
+            break;
+        case ACTION_CNT:
+            break;
+        default:
+            strncpy( str, "Unknown", sizeof(str) );
+            break;
+    }
+    return( str );
+}
+
+//*****************************************************************************
+
 static int
 rtap_rule_show( struct seq_file *file, void *arg )
 {
@@ -292,8 +310,8 @@ rtap_rule_show( struct seq_file *file, void *arg )
     spin_lock( &rtap_rules.lock ); 
     list_for_each_entry_safe( r, tmp, &rtap_rules.list, list )
     {
-        seq_printf( file, "| %3d | %11s |                        |\n",
-                    r->rid, rtap_rule_action_str( r ) );
+        seq_printf( file, "| %3d | %11s | %24s |\n",
+                    r->rid, rtap_rule_action_str( r ), rtap_rule_arg_str( r ) );
     } // end loop 
     spin_unlock( &rtap_rules.lock );
 
