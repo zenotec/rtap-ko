@@ -33,6 +33,7 @@
 #include <linux/uaccess.h>
 
 #include "listener.h"
+#include "stats.h"
 #include "rule.h"
 
 //*****************************************************************************
@@ -112,6 +113,7 @@ rtap_rule_action_forward( struct rtap_rule* r, struct sk_buff *skb )
 static int
 rtap_rule_action_count( struct rtap_rule* r, struct sk_buff *skb )
 {
+    struct rtap_stats* s = (struct rtap_stats*)r->arg;
     if( r->aid != ACTION_CNT )
     {
         return( 0 );
@@ -271,23 +273,22 @@ static const char *rtap_rule_action_str( struct rtap_rule* r )
 
 //*****************************************************************************
 
-static const char *rtap_rule_arg_str( struct rtap_rule* r )
+static const char *rtap_rule_arg_str( struct rtap_rule* r, char* str, size_t len )
 {
-    char str[24 + 1] = { 0 };
     switch( r->aid )
     {
         case ACTION_NONE:
         case ACTION_DROP:
             break;
         case ACTION_FWRD:
-            snprintf( str, sizeof(str), " -> %16s:%hu",
+            snprintf( str, len, " -> %s:%hu",
                       listener_ipaddr((struct rtap_listener*)r->arg),
                       listener_port((struct rtap_listener*)r->arg) );
             break;
         case ACTION_CNT:
             break;
         default:
-            strncpy( str, "Unknown", sizeof(str) );
+            strncpy( str, "Unknown", len );
             break;
     }
     return( str );
@@ -302,20 +303,22 @@ rtap_rule_show( struct seq_file *file, void *arg )
     struct rtap_rule *tmp = 0;
 
     // Print header
-    seq_printf( file, "----------------------------------------------\n");
-    seq_printf( file, "| rid |    action   |                        |\n");
-    seq_printf( file, "|--------------------------------------------|\n");
+    seq_printf( file, "------------------------------------------------\n");
+    seq_printf( file, "|  Id |    action   |      Argument            |\n");
+    seq_printf( file, "|----------------------------------------------|\n");
 
     // Iterate over all filter stats in list
     spin_lock( &rtap_rules.lock ); 
     list_for_each_entry_safe( r, tmp, &rtap_rules.list, list )
     {
-        seq_printf( file, "| %3d | %11s | %24s |\n",
-                    r->rid, rtap_rule_action_str( r ), rtap_rule_arg_str( r ) );
+        char arg_str[24 + 1] = { 0 };
+        rtap_rule_arg_str( r, arg_str, sizeof(arg_str) );
+        seq_printf( file, "| %3d | %11s | %-24s |\n",
+                    r->rid, rtap_rule_action_str( r ), arg_str );
     } // end loop 
     spin_unlock( &rtap_rules.lock );
 
-    seq_printf( file, "----------------------------------------------\n");
+    seq_printf( file, "------------------------------------------------\n");
 
     return( 0 );
 }

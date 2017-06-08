@@ -24,6 +24,8 @@
 // Includes
 //*****************************************************************************
 
+#include <linux/string.h>
+
 #include <linux/module.h>
 #include <linux/list.h>
 #include <linux/proc_fs.h>
@@ -43,32 +45,41 @@
 // Type definitions
 //*****************************************************************************
 
-typedef struct chain
-{
-    struct list_head list;
-    spinlock_t lock;
-} chain_t;
-
 typedef struct rtap_filter
 {
     struct list_head list;
     spinlock_t lock;
     rtap_filter_id_t fid;
     rtap_filter_type_t type;
-    rtap_filter_cmd_t cmd;
-    rtap_rule_id_t rid;
+    union
+    {
+        rtap_filter_subtype_all_t all;
+        rtap_filter_subtype_radiotap_t rtap;
+        rtap_filter_subtype_80211_t mac;
+        rtap_filter_subtype_ip_t ip;
+        rtap_filter_subtype_udp_t udp;
+    } subtype;
+    struct rtap_rule* rule;
     char *arg;
 } rtap_filter_t;
 
-typedef rtap_filter_cmd_t (*rtap_filter_func_t)( rtap_filter_t *fp, struct sk_buff *skb );
+typedef struct rtap_filter_chain
+{
+    struct list_head list;
+    spinlock_t lock;
+    const char* name;
+    struct rtap_filter filter;
+} rtap_filter_chain_t;
+
+typedef int (*rtap_filter_func_t)( rtap_filter_t *fp, struct sk_buff *skb );
 
 //*****************************************************************************
 // Function prototypes
 //*****************************************************************************
 
-rtap_filter_cmd_t rtap_rtap_filter_all( rtap_filter_t *fp, struct sk_buff *skb );
-rtap_filter_cmd_t rtap_rtap_filter_radiotap( rtap_filter_t *fp, struct sk_buff *skb );
-rtap_filter_cmd_t rtap_rtap_filter_80211_mac( rtap_filter_t *fp, struct sk_buff *skb );
+int rtap_filter_all( rtap_filter_t *fp, struct sk_buff *skb );
+int rtap_filter_radiotap( rtap_filter_t *fp, struct sk_buff *skb );
+int rtap_filter_80211( rtap_filter_t *fp, struct sk_buff *skb );
 
 //*****************************************************************************
 // Variables
@@ -81,82 +92,201 @@ rtap_filter_cmd_t rtap_rtap_filter_80211_mac( rtap_filter_t *fp, struct sk_buff 
 static rtap_filter_func_t rtap_filtertbl[] =
 {
     [FILTER_TYPE_NONE] = NULL,
-    [FILTER_TYPE_ALL] = &rtap_rtap_filter_all,
-    [FILTER_TYPE_RADIOTAP] = &rtap_rtap_filter_radiotap,
-    [FILTER_TYPE_80211_MAC] = &rtap_rtap_filter_80211_mac,
+    [FILTER_TYPE_ALL] = &rtap_filter_all,
+    [FILTER_TYPE_RADIOTAP] = &rtap_filter_radiotap,
+    [FILTER_TYPE_80211] = &rtap_filter_80211,
+    [FILTER_TYPE_IP] = NULL,
+    [FILTER_TYPE_UDP] = NULL,
+    [FILTER_TYPE_TCP] = NULL,
     [FILTER_TYPE_LAST] = NULL
 };
 
-static rtap_filter_t rtap_filters = { { 0 } }; // Dynamic rtap_filter list
+static rtap_filter_chain_t rtap_chains = {{ 0 }}; // Dynamic rtap_filter chain
 
 //*****************************************************************************
-// Functions
+// Local Functions
+//*****************************************************************************
+
+//*****************************************************************************
+
+static int
+rtap_filter_remove( rtap_filter_t* chain, rtap_filter_id_t fid )
+{
+    int ret = 0;
+    return( ret );
+}
+
+//*****************************************************************************
+
+static int
+rtap_filter_add( rtap_filter_t* chain, rtap_filter_id_t fid )
+{
+    int ret = 0;
+    return( ret );
+}
+
+//*****************************************************************************
+
+static int
+rtap_filter_clear( rtap_filter_t* chain )
+{
+    int ret = 0;
+    return( ret );
+}
+
+//*****************************************************************************
+
+static rtap_filter_chain_t*
+rtap_filter_chain_find( const char* name )
+{
+    rtap_filter_chain_t* ret = 0;
+    rtap_filter_chain_t* chain = 0;
+    rtap_filter_chain_t* tmp = 0;
+
+    // Search for specified filter chain in list
+    spin_lock( &rtap_chains.lock );
+    list_for_each_entry_safe( chain, tmp, &rtap_chains.list, list )
+    {
+        if( ! strcmp( chain->name, name) )
+        {
+            ret = chain;
+        }
+    } // end loop 
+    spin_unlock( &rtap_chains.lock );
+
+    return( ret );
+}
+
+//*****************************************************************************
+
+static int
+rtap_filter_chain_remove( const char* name )
+{
+    int ret = 0;
+    rtap_filter_chain_t *chain = 0;
+    rtap_filter_chain_t *tmp = 0;
+
+    // Search for specified filter chain in list
+    spin_lock( &rtap_chains.lock );
+    list_for_each_entry_safe( chain, tmp, &rtap_chains.list, list )
+    {
+        if( ! strcmp( chain->name, name) )
+        {
+            // Remove specified filter chain from list
+            printk( KERN_INFO "RTAP: Removing filter chain: %s\n", chain->name );
+            rtap_filter_clear( &chain->filter );
+            list_del( &chain->list );
+            kfree( chain->name );
+            chain->name = 0;
+            kfree( chain );
+            break;
+        }
+    } // end loop 
+    spin_unlock( &rtap_chains.lock );
+
+    return( ret );
+}
+
+//*****************************************************************************
+
+static int
+rtap_filter_chain_add( const char* name )
+{
+
+    rtap_filter_chain_t* chain = 0;
+
+    // Remove existing chain if exists
+    rtap_filter_chain_remove( name );
+
+    // Allocate new rtap_filter chain
+    chain = kmalloc( sizeof(rtap_filter_chain_t), GFP_ATOMIC );
+    if( ! chain )
+    {
+        printk( KERN_CRIT "RTAP: Cannot allocate memory\n" );
+        return( 0 );
+    } // end if
+    memset( (void *)chain, 0, sizeof( rtap_filter_chain_t ) );
+
+    // Initialize chain structure
+    chain->name = name;
+    spin_lock_init( &chain->filter.lock );
+    INIT_LIST_HEAD( &chain->filter.list );
+
+    // Add filter chain to tail of filter chain list
+    spin_lock( &rtap_chains.lock );
+    list_add_tail( &chain->list, &rtap_chains.list );
+    spin_unlock( &rtap_chains.lock );
+
+    return( 1 );
+}
+
+//*****************************************************************************
+
+static int
+rtap_filter_chain_clear( void )
+{
+
+    rtap_filter_chain_t *chain = 0;
+    rtap_filter_chain_t *tmp = 0;
+
+    // Remove all filter chains from list
+    spin_lock( &rtap_chains.lock );
+    list_for_each_entry_safe( chain, tmp, &rtap_chains.list, list )
+    {
+        printk( KERN_INFO "RTAP: Removing filter chain: %s\n", chain->name );
+        rtap_filter_clear( &chain->filter );
+        list_del( &chain->list );
+        kfree( chain->name );
+        chain->name = 0;
+        kfree( chain );
+    } // end loop 
+    spin_unlock( &rtap_chains.lock );
+
+    return( 1 );
+
+}
+
+//*****************************************************************************
+// Global Functions
+//*****************************************************************************
+
 //*****************************************************************************
 
 int
 rtap_filter_recv( struct sk_buff *skb )
 {
 
-    rtap_filter_t *f = 0;
-    rtap_filter_t *rtap_filter = 0;
-    rtap_filter_t *tmp = 0;
+    rtap_filter_chain_t *chain = 0;
+    rtap_filter_chain_t *tmp = 0;
+    struct sk_buff* skb_cloned = 0;
 
+    printk( KERN_INFO "RTAP: Received by filter\n" );
 
-    //printk( KERN_INFO "RTAP: Received\n" );
+    // Clone socket buffer before messing with it
+    
 
     // Loop through all rtap_filters
-    spin_lock( &rtap_filters.lock );
-    list_for_each_entry_safe( f, tmp, &rtap_filters.list, list )
+    spin_lock( &rtap_chains.lock );
+    list_for_each_entry_safe( chain, tmp, &rtap_chains.list, list )
     {
-        if( rtap_filtertbl[f->type]( f, skb ) != FILTER_CMD_NONE )
-        {
-            rtap_filter = f;
-            break;
-        } // end if
+        //rtap_filtertbl[f->type]( f, skb_cloned );
     } // end loop 
-    spin_unlock( &rtap_filters.lock );
+    spin_unlock( &rtap_chains.lock );
 
-    if( rtap_filter )
-    {
-        // Check if forward command was given
-        switch( rtap_filter->cmd )
-        {    
-            case FILTER_CMD_FWRD:
-                printk( KERN_INFO "RTAP: Forwarding\n" );
-                // Update rtap_filter statistics
-                stats_forwarded( rtap_filter->fid );
-                //listener_send( skb );
-                break;
-            case FILTER_CMD_DROP:
-                printk( KERN_INFO "RTAP: Dropping\n" );
-                // Update rtap_filter statistics
-                stats_dropped( rtap_filter->fid );
-            case FILTER_CMD_NONE:
-                break;
-            default:
-                printk( KERN_INFO "RTAP: Unknown command\n" );
-                break;
-        } // end switch 
-    } // end if
-    else
-    {
-        stats_dropped( 0 );
-    } // end else
-
-    // Free frame
-    kfree_skb( skb );
+    // Free cloned socket buffer
+    kfree_skb( skb_cloned );
 
     // Return success
     return( 0 );
 }
 
-//*****************************************************************************
+#if 0
 //*****************************************************************************
 
-static const char *rtap_filter_type_str( rtap_filter_type_t type )
+static const char *rtap_filter_type_str( rtap_filter_t* f  )
 {
     const char *str = 0;
-    switch( type )
+    switch( f->type )
     {
         case FILTER_TYPE_NONE:
             str = "None";
@@ -167,9 +297,18 @@ static const char *rtap_filter_type_str( rtap_filter_type_t type )
         case FILTER_TYPE_RADIOTAP:
             str = "RadioTap";
             break;
-        case FILTER_TYPE_80211_MAC:
+        case FILTER_TYPE_80211:
             str = "802.11 MAC";
             break;
+        case FILTER_TYPE_IP:
+            str = "IP";
+            break;
+        case FILTER_TYPE_UDP:
+            str = "UDP";
+            break;
+        case FILTER_TYPE_TCP:
+            str = "TCP";
+            break;
         default:
             str = "Unknown";
             break;
@@ -179,16 +318,24 @@ static const char *rtap_filter_type_str( rtap_filter_type_t type )
 
 //*****************************************************************************
 
-static const char *rtap_filter_cmd_str( rtap_filter_cmd_t cmd )
+static const char *rtap_filter_subtype_str( rtap_filter_t* f )
 {
     const char *str = 0;
-    switch( cmd )
+    switch( f->type )
     {
-        case FILTER_CMD_DROP:
-            str = "Drop";
+        case FILTER_TYPE_NONE:
             break;
-        case FILTER_CMD_FWRD:
-            str = "Forward";
+        case FILTER_TYPE_ALL:
+            break;
+        case FILTER_TYPE_RADIOTAP:
+            break;
+        case FILTER_TYPE_80211:
+            break;
+        case FILTER_TYPE_IP:
+            break;
+        case FILTER_TYPE_UDP:
+            break;
+        case FILTER_TYPE_TCP:
             break;
         default:
             str = "Unknown";
@@ -198,35 +345,26 @@ static const char *rtap_filter_cmd_str( rtap_filter_cmd_t cmd )
 }
 
 //*****************************************************************************
-//*****************************************************************************
 
-rtap_filter_cmd_t
-rtap_rtap_filter_all( rtap_filter_t *fp, struct sk_buff *skb )
+void
+rtap_filter_all( rtap_filter_t *f, struct sk_buff *skb )
 {
-    printk( KERN_INFO "RTAP: rtap_filter_all: %d\n", fp->cmd );
-    return( fp->cmd );
+    return;
 }
 
 //*****************************************************************************
 
-rtap_filter_cmd_t
-rtap_rtap_filter_radiotap( rtap_filter_t *fp, struct sk_buff *skb )
+void
+rtap_filter_radiotap( rtap_filter_t *f, struct sk_buff *skb )
 {
-    rtap_filter_cmd_t ret_cmd = FILTER_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr = (struct ieee80211_radiotap_header *)skb->data;
-    if ( rthdr ); // TODO: Implement
-    switch( fp->rid )
-    {
-        default:
-            break;
-    }
-    return( ret_cmd );
+    return;
 }
 
 //*****************************************************************************
 
 rtap_filter_cmd_t
-rtap_rtap_filter_80211_mac( rtap_filter_t *fp, struct sk_buff *skb )
+rtap_filter_80211_mac( rtap_filter_t *fp, struct sk_buff *skb )
 {
     rtap_filter_cmd_t ret_cmd = FILTER_CMD_NONE;
     struct ieee80211_radiotap_header *rthdr =
@@ -399,13 +537,15 @@ rtap_filter_clear( void )
     return( 0 );
 }
 
+#endif
+
 //*****************************************************************************
 
 int
 rtap_filter_init( void )
 {
-    spin_lock_init( &rtap_filters.lock );
-    INIT_LIST_HEAD( &rtap_filters.list );
+    spin_lock_init( &rtap_chains.lock );
+    INIT_LIST_HEAD( &rtap_chains.list );
     return( 0 );
 }
 
@@ -414,26 +554,25 @@ rtap_filter_init( void )
 int
 rtap_filter_exit( void )
 {
-    return( rtap_filter_clear() );
+    return( rtap_filter_chain_clear() );
 }
 
 //*****************************************************************************
-//*****************************************************************************
 
 static int
-rtap_filter_show( struct seq_file *file, void *arg )
+rtap_filter_show( struct seq_file *file, void *arg, rtap_filter_t* chain )
 {
-    rtap_filter_t *rtap_filter = 0;
+    rtap_filter_t *filter = 0;
     rtap_filter_t *tmp = 0;
 
     // Iterate over all rtap_filters in list
-    spin_lock( &rtap_filters.lock );
-    list_for_each_entry_safe( rtap_filter, tmp, &rtap_filters.list, list )
+    spin_lock( &chain->lock );
+    list_for_each_entry_safe( filter, tmp, &chain->list, list )
     {
-        seq_printf( file, "%d\tFilter Type[%d]\tRule[%d]\tCmd[%d]\tArg: %s\n",
-         rtap_filter->fid, rtap_filter->type, rtap_filter->rid, rtap_filter->cmd, rtap_filter->arg );
+//        seq_printf( file, "%d\tFilter Type[%d]\tRule[%d]\tCmd[%d]\tArg: %s\n",
+//                    filter->fid, filter->type, filter->rid, filter->cmd, filter->arg );
     } // end loop 
-    spin_unlock( &rtap_filters.lock );
+    spin_unlock( &chain->lock );
 
     return( 0 );
 }
@@ -441,9 +580,30 @@ rtap_filter_show( struct seq_file *file, void *arg )
 //*****************************************************************************
 
 static int
+rtap_filter_chain_show( struct seq_file *file, void *arg )
+{
+
+    rtap_filter_chain_t *chain = 0;
+    rtap_filter_chain_t *tmp = 0;
+
+    // Iterate over all rtap_filters in list
+    spin_lock( &rtap_chains.lock );
+    list_for_each_entry_safe( chain, tmp, &rtap_chains.list, list )
+    {
+        rtap_filter_show( file, arg, &chain->filter );
+    } // end loop 
+    spin_unlock( &rtap_chains.lock );
+
+    return( 0 );
+
+}
+
+//*****************************************************************************
+
+static int
 rtap_filter_open( struct inode *inode, struct file *file )
 {
-    return( single_open( file, rtap_filter_show, NULL ) );
+    return( single_open( file, rtap_filter_chain_show, NULL ) );
 }
 
 //*****************************************************************************
@@ -476,44 +636,64 @@ static ssize_t
 rtap_filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
     char fltrstr[256+1] = { 0 };
-    int fid; // rtap_filter id
-    int type; // rtap_filter type
-    int cmd; // rtap_filter cmd
-    int rid; // rule id
-    char *str; // rtap_filter argument string
+    char *name = 0; // 
+    int fid = 0; // filter id
+    int type = 0; // filter type
+    int rid = 0; // rule id
+    int subtype = 0; // filter subtype
+    char *arg = 0; // filter argument string
     int ret = 0;
 
     if( ! cnt )
     {
-        rtap_filter_clear();
         return( cnt );
     } // end if
 
-    // Allocate new rtap_filter list item
-    str = kmalloc( 256+1, GFP_ATOMIC );
-    if( ! str )
+    // Allocate new chain name string buffer
+    name = kmalloc( 256+1, GFP_ATOMIC );
+    if( ! name )
     {
         printk( KERN_CRIT "RTAP: Cannot allocate memory\n" );
         return( -1 );
     } // end if
-    memset( (void *)str, 0, 256+1 );
+    memset( (void *)name, 0, 256+1 );
+
+    // Allocate new filter argument string buffer
+    arg = kmalloc( 256+1, GFP_ATOMIC );
+    if( ! arg )
+    {
+        printk( KERN_CRIT "RTAP: Cannot allocate memory\n" );
+        return( -1 );
+    } // end if
+    memset( (void *)arg, 0, 256+1 );
 
     cnt = (cnt >= 256) ? 256 : cnt;
     copy_from_user( fltrstr, buf, cnt );
-    ret = sscanf( fltrstr, "%d %d %d %d %256s", &fid, &type, &rid, &cmd, str );
+    ret = sscanf( fltrstr, "%256s %d %d %d %d %256s", name, &fid, &type, &rid, &subtype, arg );
 
     if( (ret == 0) && (strlen(fltrstr) == 1) && (fltrstr[0] == '-') )
     {
-        rtap_filter_clear();
+        rtap_filter_chain_clear();
+        kfree( name );
+        kfree( arg );
     } // end if
-    else if( (ret == 5) && (fid > 0) )
+    else if( (ret == 1) && (name[0] == '-') )
     {
-        rtap_filter_add( fid, type, rid, cmd, str );
+        rtap_filter_chain_remove( &name[1] );
+        kfree( name );
+        kfree( arg );
+    }
+    else if( (ret == 2) && (fid < 0) )
+    {
+        rtap_filter_chain_t* chain = rtap_filter_chain_find( name );
+        rtap_filter_remove( &chain->filter, -fid );
+        kfree( name );
+        kfree( arg );
+    }
+    else if( (ret == 6) && (fid > 0) )
+    {
+        //rtap_filter_add( fid, type, rid, cmd, str );
     } // end else if
-    else if( (ret == 1) && (fid < 0) )
-    {
-        rtap_filter_remove( -fid );
-    } // end if
     else
     {
         printk( KERN_ERR "RTAP: Failed parsing rtap_filter string: %s\n", fltrstr );

@@ -54,31 +54,49 @@ typedef enum rtap_filter_type
     FILTER_TYPE_NONE = 0,
     FILTER_TYPE_ALL = 1,
     FILTER_TYPE_RADIOTAP = 2,
-    FILTER_TYPE_80211_MAC = 3,
+    FILTER_TYPE_80211 = 3,
     FILTER_TYPE_IP = 4,
     FILTER_TYPE_UDP = 5,
     FILTER_TYPE_TCP = 6,
     FILTER_TYPE_LAST
 } rtap_filter_type_t;
 
-typedef enum rtap_filter_cmd
+typedef enum rtap_filter_subtype_all
 {
-    FILTER_CMD_NONE = 0,
-    FILTER_CMD_DROP = 1,
-    FILTER_CMD_FWRD = 2,
-    FILTER_CMD_CNT  = 3,
-    FILTER_CMD_LAST
-} rtap_filter_cmd_t;
+    FILTER_SUBTYPE_ALL_NONE = 0,
+    FILTER_SUBTYPE_ALL_SIZE = 1,
+    FILTER_SUBTYPE_ALL_LAST
+} rtap_filter_subtype_all_t;
 
-typedef enum rtap_filter_subtype
+typedef enum rtap_filter_subtype_radiotap
 {
-    RULE_ID_NONE = 0,
-    RULE_ID_RTAP_DB = 1,
-    RULE_ID_MAC_SA = 2,
-    RULE_ID_MAC_DA = 3,
-    RULE_ID_MAC_FCTL = 4,
-    RULE_ID_LAST
-} rtap_filter_subtype_t;
+    FILTER_SUBTYPE_RTAP_NONE = 0,
+    FILTER_SUBTYPE_RTAP_DB = 1,
+    FILTER_SUBTYPE_RTAP_LAST
+} rtap_filter_subtype_radiotap_t;
+
+typedef enum rtap_filter_subtype_80211
+{
+    FILTER_SUBTYPE_80211_NONE = 0,
+    FILTER_SUBTYPE_80211_SA = 1,
+    FILTER_SUBTYPE_80211_DA = 2,
+    FILTER_SUBTYPE_80211_TA = 3,
+    FILTER_SUBTYPE_80211_RA = 4,
+    FILTER_SUBTYPE_80211_FCTL = 5,
+    FILTER_SUBTYPE_80211_LAST
+} rtap_filter_subtype_80211_t;
+
+typedef enum rtap_filter_subtype_ip
+{
+    FILTER_SUBTYPE_IP_NONE = 0,
+    FILTER_SUBTYPE_IP_LAST
+} rtap_filter_subtype_ip_t;
+
+typedef enum rtap_filter_subtype_udp
+{
+    FILTER_SUBTYPE_UDP_NONE = 0,
+    FILTER_SUBTYPE_UDP_LAST
+} rtap_filter_subtype_udp_t;
 
 typedef int (*rtap_filter_func)( struct sk_buff *skb );
 

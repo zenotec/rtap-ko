@@ -110,6 +110,9 @@ listener_add( rtap_listener_id_t lid, const char *ipaddr, const short port )
     } // end if
     memset( (void *)listener, 0, sizeof( rtap_listener_t ) );
 
+    // Store listener identifier
+    listener->lid = lid;
+
     // Convert IP string to socket address
     memset( &listener->in_addr, 0, sizeof( listener->in_addr ) );
     listener->in_addr.sin_family = AF_INET;
@@ -255,8 +258,8 @@ proc_show( struct seq_file *file, void *arg )
     spin_lock( &rtap_listeners.lock );
     list_for_each_entry_safe( listener, tmp, &rtap_listeners.list, list )
     {
-        seq_printf( file, "%s:%hu\n", listener->ipaddr,
-                    ntohs(listener->in_addr.sin_port) );
+        seq_printf( file, "[%u] %s:%hu\n", listener->lid, listener->ipaddr,
+                    listener->port );
     } // end loop 
     spin_unlock( &rtap_listeners.lock );
 
