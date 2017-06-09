@@ -69,7 +69,7 @@ typedef struct rtap_filter_chain
     spinlock_t lock;
     const char* name;
     struct rtap_filter filter;
-} rtap_filter_chain_t;
+} rtap_chain_t;
 
 typedef int (*rtap_filter_func_t)( rtap_filter_t *fp, struct sk_buff *skb );
 
@@ -101,7 +101,7 @@ static rtap_filter_func_t rtap_filtertbl[] =
     [FILTER_TYPE_LAST] = NULL
 };
 
-static rtap_filter_chain_t rtap_chains = {{ 0 }}; // Dynamic rtap_filter chain
+static rtap_chain_t rtap_chains = {{ 0 }}; // Dynamic rtap_filter chain
 
 //*****************************************************************************
 // Local Functions
@@ -118,10 +118,10 @@ rtap_filter_remove( rtap_filter_t* chain, rtap_filter_id_t fid )
 
 //*****************************************************************************
 
-static int
+static rtap_filter_t*
 rtap_filter_add( rtap_filter_t* chain, rtap_filter_id_t fid )
 {
-    int ret = 0;
+    rtap_filter_t* ret = 0;
     return( ret );
 }
 
@@ -136,12 +136,12 @@ rtap_filter_clear( rtap_filter_t* chain )
 
 //*****************************************************************************
 
-static rtap_filter_chain_t*
-rtap_filter_chain_find( const char* name )
+static rtap_chain_t*
+rtap_chain_find( const char* name )
 {
-    rtap_filter_chain_t* ret = 0;
-    rtap_filter_chain_t* chain = 0;
-    rtap_filter_chain_t* tmp = 0;
+    rtap_chain_t* ret = 0;
+    rtap_chain_t* chain = 0;
+    rtap_chain_t* tmp = 0;
 
     // Search for specified filter chain in list
     spin_lock( &rtap_chains.lock );
@@ -160,11 +160,11 @@ rtap_filter_chain_find( const char* name )
 //*****************************************************************************
 
 static int
-rtap_filter_chain_remove( const char* name )
+rtap_chain_remove( const char* name )
 {
     int ret = 0;
-    rtap_filter_chain_t *chain = 0;
-    rtap_filter_chain_t *tmp = 0;
+    rtap_chain_t *chain = 0;
+    rtap_chain_t *tmp = 0;
 
     // Search for specified filter chain in list
     spin_lock( &rtap_chains.lock );
@@ -189,23 +189,23 @@ rtap_filter_chain_remove( const char* name )
 
 //*****************************************************************************
 
-static int
-rtap_filter_chain_add( const char* name )
+static rtap_chain_t*
+rtap_chain_add( const char* name )
 {
 
-    rtap_filter_chain_t* chain = 0;
+    rtap_chain_t* chain = 0;
 
     // Remove existing chain if exists
-    rtap_filter_chain_remove( name );
+    rtap_chain_remove( name );
 
     // Allocate new rtap_filter chain
-    chain = kmalloc( sizeof(rtap_filter_chain_t), GFP_ATOMIC );
+    chain = kmalloc( sizeof(rtap_chain_t), GFP_ATOMIC );
     if( ! chain )
     {
         printk( KERN_CRIT "RTAP: Cannot allocate memory\n" );
         return( 0 );
     } // end if
-    memset( (void *)chain, 0, sizeof( rtap_filter_chain_t ) );
+    memset( (void *)chain, 0, sizeof( rtap_chain_t ) );
 
     // Initialize chain structure
     chain->name = name;
@@ -217,17 +217,17 @@ rtap_filter_chain_add( const char* name )
     list_add_tail( &chain->list, &rtap_chains.list );
     spin_unlock( &rtap_chains.lock );
 
-    return( 1 );
+    return( chain );
 }
 
 //*****************************************************************************
 
 static int
-rtap_filter_chain_clear( void )
+rtap_chain_clear( void )
 {
 
-    rtap_filter_chain_t *chain = 0;
-    rtap_filter_chain_t *tmp = 0;
+    rtap_chain_t *chain = 0;
+    rtap_chain_t *tmp = 0;
 
     // Remove all filter chains from list
     spin_lock( &rtap_chains.lock );
@@ -256,14 +256,14 @@ int
 rtap_filter_recv( struct sk_buff *skb )
 {
 
-    rtap_filter_chain_t *chain = 0;
-    rtap_filter_chain_t *tmp = 0;
+    rtap_chain_t *chain = 0;
+    rtap_chain_t *tmp = 0;
     struct sk_buff* skb_cloned = 0;
 
     printk( KERN_INFO "RTAP: Received by filter\n" );
 
     // Clone socket buffer before messing with it
-    
+    skb_cloned = skb_clone( skb, GFP_ATOMIC );
 
     // Loop through all rtap_filters
     spin_lock( &rtap_chains.lock );
@@ -554,7 +554,7 @@ rtap_filter_init( void )
 int
 rtap_filter_exit( void )
 {
-    return( rtap_filter_chain_clear() );
+    return( rtap_chain_clear() );
 }
 
 //*****************************************************************************
@@ -569,8 +569,8 @@ rtap_filter_show( struct seq_file *file, void *arg, rtap_filter_t* chain )
     spin_lock( &chain->lock );
     list_for_each_entry_safe( filter, tmp, &chain->list, list )
     {
-//        seq_printf( file, "%d\tFilter Type[%d]\tRule[%d]\tCmd[%d]\tArg: %s\n",
-//                    filter->fid, filter->type, filter->rid, filter->cmd, filter->arg );
+//        seq_printf( file, "%d\tFilter Type[%d]\tRule[%d]\tSubType[%d]\tArg: %s\n",
+//                    filter->fid, filter->type, filter->rule->rid, filter->subtype, filter->arg );
     } // end loop 
     spin_unlock( &chain->lock );
 
@@ -580,16 +580,17 @@ rtap_filter_show( struct seq_file *file, void *arg, rtap_filter_t* chain )
 //*****************************************************************************
 
 static int
-rtap_filter_chain_show( struct seq_file *file, void *arg )
+rtap_chain_show( struct seq_file *file, void *arg )
 {
 
-    rtap_filter_chain_t *chain = 0;
-    rtap_filter_chain_t *tmp = 0;
+    rtap_chain_t *chain = 0;
+    rtap_chain_t *tmp = 0;
 
     // Iterate over all rtap_filters in list
     spin_lock( &rtap_chains.lock );
     list_for_each_entry_safe( chain, tmp, &rtap_chains.list, list )
     {
+        seq_printf( file, "Chain: %s\n", chain->name );
         rtap_filter_show( file, arg, &chain->filter );
     } // end loop 
     spin_unlock( &rtap_chains.lock );
@@ -601,15 +602,15 @@ rtap_filter_chain_show( struct seq_file *file, void *arg )
 //*****************************************************************************
 
 static int
-rtap_filter_open( struct inode *inode, struct file *file )
+proc_open( struct inode *inode, struct file *file )
 {
-    return( single_open( file, rtap_filter_chain_show, NULL ) );
+    return( single_open( file, rtap_chain_show, NULL ) );
 }
 
 //*****************************************************************************
 
 static int
-rtap_filter_close( struct inode *inode, struct file *file )
+proc_close( struct inode *inode, struct file *file )
 {
     return( single_release( inode, file ) );
 }
@@ -617,7 +618,7 @@ rtap_filter_close( struct inode *inode, struct file *file )
 //*****************************************************************************
 
 static ssize_t
-rtap_filter_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+proc_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 {
     return( seq_read( file, buf, cnt, off ) );
 }
@@ -625,7 +626,7 @@ rtap_filter_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
 //*****************************************************************************
 
 static loff_t
-rtap_filter_lseek( struct file *file, loff_t off, int cnt )
+proc_lseek( struct file *file, loff_t off, int cnt )
 {
     return( seq_lseek( file, off, cnt ) );
 }
@@ -633,7 +634,7 @@ rtap_filter_lseek( struct file *file, loff_t off, int cnt )
 //*****************************************************************************
 
 static ssize_t
-rtap_filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
 {
     char fltrstr[256+1] = { 0 };
     char *name = 0; // 
@@ -671,27 +672,38 @@ rtap_filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t
     copy_from_user( fltrstr, buf, cnt );
     ret = sscanf( fltrstr, "%256s %d %d %d %d %256s", name, &fid, &type, &rid, &subtype, arg );
 
+    printk( KERN_INFO "RTAP: Filter: %s %d %d %d %d %s", name, fid, type, rid, subtype, arg );
+
     if( (ret == 0) && (strlen(fltrstr) == 1) && (fltrstr[0] == '-') )
     {
-        rtap_filter_chain_clear();
+        rtap_chain_clear();
         kfree( name );
         kfree( arg );
     } // end if
     else if( (ret == 1) && (name[0] == '-') )
     {
-        rtap_filter_chain_remove( &name[1] );
+        rtap_chain_remove( &name[1] );
         kfree( name );
         kfree( arg );
     }
     else if( (ret == 2) && (fid < 0) )
     {
-        rtap_filter_chain_t* chain = rtap_filter_chain_find( name );
+        rtap_chain_t* chain = rtap_chain_find( name );
         rtap_filter_remove( &chain->filter, -fid );
         kfree( name );
         kfree( arg );
     }
-    else if( (ret == 6) && (fid > 0) )
+    else if( (ret >= 5) && (fid > 0) )
     {
+        rtap_chain_t* chain = rtap_chain_find( name );
+        if( ! chain )
+        {
+            chain = rtap_chain_add( name );
+        }
+        else
+        {
+            kfree( name );
+        }
         //rtap_filter_add( fid, type, rid, cmd, str );
     } // end else if
     else
@@ -709,10 +721,10 @@ rtap_filter_write( struct file *file, const char __user *buf, size_t cnt, loff_t
 const struct file_operations rtap_filter_fops =
 {
     .owner      = THIS_MODULE,
-    .open       = rtap_filter_open,
-    .release    = rtap_filter_close,
-    .read       = rtap_filter_read,
-    .llseek     = rtap_filter_lseek,
-    .write      = rtap_filter_write,
+    .open       = proc_open,
+    .release    = proc_close,
+    .read       = proc_read,
+    .llseek     = proc_lseek,
+    .write      = proc_write,
 };
 

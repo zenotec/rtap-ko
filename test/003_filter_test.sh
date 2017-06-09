@@ -6,7 +6,7 @@ cat /proc/rtap/listeners
 echo "1 2 1" | sudo tee /proc/rtap/rules 
 dmesg 
 cat /proc/rtap/rules
-echo "1 3 4 2 0080" | sudo tee /proc/rtap/filters
+echo "default 1 1 1 1 0" | sudo tee /proc/rtap/filters
 dmesg
 cat /proc/rtap/filters 
 grep "" /proc/rtap/*

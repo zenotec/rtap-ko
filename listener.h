@@ -29,6 +29,8 @@
 // Includes
 //*****************************************************************************
 
+#include <linux/types.h>
+
 #include <linux/proc_fs.h>
 #include <linux/skbuff.h>
 
@@ -53,10 +55,25 @@ extern const struct file_operations listener_fops;
 extern int listener_init( void );
 extern int listener_exit( void );
 
-extern uint16_t listener_id( struct rtap_listener* l );
-extern const char* listener_ipaddr( struct rtap_listener* l );
-extern uint16_t listener_port( struct rtap_listener* l );
-extern struct rtap_listener* listener_findbyid( rtap_listener_id_t lid );
-extern int listener_send( struct rtap_listener* l, struct sk_buff *skb );
+extern uint16_t
+listener_id( struct rtap_listener* l );\
+
+extern rtap_listener_id_t
+listener_get_id( struct rtap_listener* l);
+
+extern const char*
+listener_get_ipaddr( struct rtap_listener* l );
+
+extern uint16_t
+listener_get_port( struct rtap_listener* l );
+
+extern struct rtap_listener*
+listener_findbyid(rtap_listener_id_t lid);
+
+extern struct rtap_listener*
+listener_findbyipandport(const char* addr, uint16_t port);
+
+extern int
+listener_send( struct rtap_listener* l, struct sk_buff *skb );
 
 #endif

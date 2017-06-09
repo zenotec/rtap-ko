@@ -1,5 +1,5 @@
 obj-m = rtap.o
-rtap-objs := rtap-ko.o filter.o rule.o ksocket.o device.o listener.o stats.o proc.o
+rtap-objs := ksocket.o device.o listener.o rule.o filter.o proc.o rtap-ko.o stats.o
 
 SRC := $(shell pwd)
 KVERSION := $(shell uname -r)
