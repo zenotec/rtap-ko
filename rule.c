@@ -50,7 +50,11 @@ typedef struct rtap_rule
   rtap_rule_id_t rid;
   rtap_rule_action_t aid;
   rtap_rule_action_func func;
-  void *arg;
+  union
+  {
+    struct rtap_listener* l;
+    struct rtap_stats* s;
+  } arg;
 } rtap_rule_t;
 
 //*****************************************************************************
@@ -73,7 +77,10 @@ static struct rtap_rule rtap_rules = { { 0 } };
 static void
 rtap_rule_destroy(struct rtap_rule* r)
 {
-  kfree(r);
+  if (r)
+  {
+    kfree(r);
+  }
 }
 
 /******************************************************************************
@@ -164,7 +171,7 @@ rtap_rule_clear(void)
 static int
 rtap_rule_action_none(struct rtap_rule* r, struct sk_buff *skb)
 {
-  if (r->aid != ACTION_NONE)
+  if (!r || r->aid != ACTION_NONE)
   {
     return (-1);
   }
@@ -177,7 +184,7 @@ rtap_rule_action_none(struct rtap_rule* r, struct sk_buff *skb)
 static int
 rtap_rule_action_drop(struct rtap_rule* r, struct sk_buff *skb)
 {
-  if (r->aid != ACTION_DROP)
+  if (!r || r->aid != ACTION_DROP)
   {
     return (-1);
   }
@@ -191,15 +198,14 @@ static int
 rtap_rule_action_forward(struct rtap_rule* r, struct sk_buff *skb)
 {
 
-  struct rtap_listener* l = (struct rtap_listener*) r->arg;
-  if (r->aid != ACTION_FWRD)
+  if (!r || r->aid != ACTION_FWRD)
   {
     return (-1);
   }
 
   printk( KERN_INFO "RTAP: Forward action rule\n");
 
-  listener_send(l, skb);
+  listener_send(r->arg.l, skb);
 
   // Return NULL on success; negative on error
   return (0);
@@ -210,11 +216,11 @@ rtap_rule_action_forward(struct rtap_rule* r, struct sk_buff *skb)
 static int
 rtap_rule_action_count(struct rtap_rule* r, struct sk_buff *skb)
 {
-  //struct rtap_stats* s = (struct rtap_stats*) r->arg;
-  if (r->aid != ACTION_CNT)
+  if (!r || r->aid != ACTION_CNT)
   {
     return (-1);
   }
+
   // Return NULL on success; negative on error
   return (0);
 }
@@ -249,7 +255,12 @@ rtap_rule_exit(void)
 rtap_rule_id_t
 rtap_rule_get_id(rtap_rule_t* r)
 {
-  return (r->rid);
+  rtap_rule_id_t id = 0;
+  if (r)
+  {
+    id = r->rid;
+  }
+  return (id);
 }
 
 /******************************************************************************
@@ -273,7 +284,12 @@ rtap_rule_set_id(rtap_rule_t* r, rtap_rule_id_t id)
 rtap_rule_action_t
 rtap_rule_get_action(rtap_rule_t* r)
 {
-  return (r->aid);
+  rtap_rule_action_t action = 0;
+  if (r)
+  {
+    action = r->aid;
+  }
+  return (action);
 }
 
 /******************************************************************************
@@ -298,8 +314,8 @@ rtap_rule_set_action(rtap_rule_t* r, rtap_rule_action_t aid, void* arg)
       break;
     case ACTION_FWRD:
       r->func = rtap_rule_action_forward;
-      r->arg = (void*) listener_findbyid(*(unsigned int*) arg);
-      if (r->arg)
+      r->arg.l = (void*) listener_findbyid(*(unsigned int*) arg);
+      if (r->arg.l)
       {
         ret = 0;
       }
@@ -390,8 +406,8 @@ rtap_rule_arg_str(struct rtap_rule* r, char* str, size_t len)
   case ACTION_DROP:
     break;
   case ACTION_FWRD:
-    snprintf(str, len, " -> %s:%hu", listener_get_ipaddr((struct rtap_listener*) r->arg),
-        listener_get_port((struct rtap_listener*) r->arg));
+    snprintf(str, len, " -> %s:%hu", listener_get_ipaddr(r->arg.l),
+        listener_get_port(r->arg.l));
     break;
   case ACTION_CNT:
     break;

@@ -38,7 +38,7 @@
 #include "ksocket.h"
 #include "listener.h"
 
-typedef struct rtap_listener
+struct rtap_listener
 {
   struct list_head list;
   spinlock_t lock;
@@ -47,7 +47,7 @@ typedef struct rtap_listener
   uint16_t port;
   struct sockaddr_in in_addr;
   ksocket_t sockfd;
-} rtap_listener_t;
+};
 
 //*****************************************************************************
 // Variables
@@ -57,7 +57,7 @@ typedef struct rtap_listener
 
 /* Local */
 
-static rtap_listener_t rtap_listeners = { { 0 } };
+static struct rtap_listener rtap_listeners = { { 0 } };
 
 //*****************************************************************************
 // Local Functions
@@ -69,9 +69,15 @@ static rtap_listener_t rtap_listeners = { { 0 } };
 static void
 listener_destroy(struct rtap_listener* l)
 {
-  kfree(l->ipaddr);
-  l->ipaddr = NULL;
-  kfree(l);
+  if (l)
+  {
+    if (l->ipaddr)
+    {
+      kfree(l->ipaddr);
+      l->ipaddr = NULL;
+    }
+    kfree(l);
+  }
 }
 
 /******************************************************************************
@@ -83,13 +89,13 @@ listener_create(void)
   struct rtap_listener* l = 0;
 
   // Allocate new listener list item
-  l = kmalloc(sizeof(rtap_listener_t), GFP_KERNEL);
+  l = kmalloc(sizeof(struct rtap_listener), GFP_KERNEL);
   if (!l)
   {
     printk( KERN_CRIT "RTAP: Cannot allocate memory\n");
     return (NULL);
   } // end if
-  memset((void *) l, 0, sizeof(rtap_listener_t));
+  memset((void *) l, 0, sizeof(struct rtap_listener));
 
   // Allocate buffer for IP address
   l->ipaddr = kmalloc(32, GFP_KERNEL);
@@ -118,7 +124,7 @@ listener_create(void)
  *
 ******************************************************************************/
 static int
-listener_remove(rtap_listener_t* l)
+listener_remove(struct rtap_listener* l)
 {
   if (l)
   {
@@ -133,7 +139,7 @@ listener_remove(rtap_listener_t* l)
  *
 ******************************************************************************/
 static int
-listener_add(rtap_listener_t* l)
+listener_add(struct rtap_listener* l)
 {
 
   if (l)
@@ -141,12 +147,13 @@ listener_add(rtap_listener_t* l)
     // Remove any existing matching listener
     listener_remove(listener_findbyipandport(l->ipaddr, l->port));
 
-    // Add device list item to tail of device list
+    // Add listener to tail of device list
     printk( KERN_INFO "RTAP: Adding listener: %s:%hu\n", l->ipaddr, l->port);
     spin_lock(&rtap_listeners.lock);
     list_add_tail(&l->list, &rtap_listeners.list);
     spin_unlock(&rtap_listeners.lock);
   }
+
   // Return NULL on success; negative on error
   return (0);
 }
@@ -157,8 +164,8 @@ listener_add(rtap_listener_t* l)
 static int
 listener_clear(void)
 {
-  rtap_listener_t *l = NULL;
-  rtap_listener_t *tmp = NULL;
+  struct rtap_listener *l = NULL;
+  struct rtap_listener *tmp = NULL;
 
   // Remove all listeners from list
   spin_lock(&rtap_listeners.lock);
@@ -201,7 +208,12 @@ listener_exit(void)
 rtap_listener_id_t
 listener_get_id(struct rtap_listener* l)
 {
-  return (l->lid);
+  rtap_listener_id_t id = 0;
+  if (l)
+  {
+    id = l->lid;
+  }
+  return (id);
 }
 
 /******************************************************************************
@@ -225,7 +237,12 @@ listener_set_id(struct rtap_listener* l, rtap_listener_id_t id)
 const char*
 listener_get_ipaddr(struct rtap_listener* l)
 {
-  return (l->ipaddr);
+  const char* ipaddr = NULL;
+  if (l)
+  {
+    ipaddr = l->ipaddr;
+  }
+  return (ipaddr);
 }
 
 /******************************************************************************
@@ -237,9 +254,11 @@ listener_set_ipaddr(struct rtap_listener* l, const char* addr)
   int ret = -1;
   if (l && addr)
   {
-    inet_aton(addr, &l->in_addr.sin_addr);
+    if (inet_aton(addr, &l->in_addr.sin_addr) )
+    {
     strcpy(l->ipaddr, addr);
     ret = 0;
+    }
   }
   return (ret);
 }
@@ -250,7 +269,12 @@ listener_set_ipaddr(struct rtap_listener* l, const char* addr)
 uint16_t
 listener_get_port(struct rtap_listener* l)
 {
-  return (l->port);
+  uint16_t port = 0;
+  if (l)
+  {
+    port = l->port;
+  }
+  return (port);
 }
 
 /******************************************************************************
@@ -276,9 +300,9 @@ struct rtap_listener*
 listener_findbyid(rtap_listener_id_t lid)
 {
 
-  rtap_listener_t *listener = NULL;
-  rtap_listener_t *l = NULL;
-  rtap_listener_t *tmp = NULL;
+  struct rtap_listener *listener = NULL;
+  struct rtap_listener *l = NULL;
+  struct rtap_listener *tmp = NULL;
 
   // Search for listener in list and remove
   spin_lock(&rtap_listeners.lock);
@@ -304,22 +328,25 @@ struct rtap_listener*
 listener_findbyipandport(const char* addr, uint16_t port)
 {
 
-  rtap_listener_t *listener = NULL;
-  rtap_listener_t *l = NULL;
-  rtap_listener_t *tmp = NULL;
+  struct rtap_listener *listener = NULL;
+  struct rtap_listener *l = NULL;
+  struct rtap_listener *tmp = NULL;
 
   // Search for listener in list and remove
-  spin_lock(&rtap_listeners.lock);
-  list_for_each_entry_safe(l, tmp, &rtap_listeners.list, list)
+  if (addr && port)
   {
-    if (!(strcmp(l->ipaddr, addr)) && (l->port == port))
+    spin_lock(&rtap_listeners.lock);
+    list_for_each_entry_safe(l, tmp, &rtap_listeners.list, list)
     {
-      printk( KERN_INFO "RTAP: Found listener: %s:%hu\n", l->ipaddr, l->port );
-      listener = l;
-      break;
-    } // end if
-  } // end loop
-  spin_unlock(&rtap_listeners.lock);
+      if (!(strcmp(l->ipaddr, addr)) && (l->port == port))
+      {
+        printk( KERN_INFO "RTAP: Found listener: %s:%hu\n", l->ipaddr, l->port );
+        listener = l;
+        break;
+      } // end if
+    } // end loop
+    spin_unlock(&rtap_listeners.lock);
+  }
 
   return (listener);
 
@@ -331,11 +358,13 @@ listener_findbyipandport(const char* addr, uint16_t port)
 int
 listener_send(struct rtap_listener* l, struct sk_buff* skb)
 {
-
-  ksendto(l->sockfd, skb->data, skb->len, 0, (const struct sockaddr *) &l->in_addr,
-      sizeof(l->in_addr));
-
-  return (0);
+  int ret = 0;
+  if (l)
+  {
+    ret = ksendto(l->sockfd, skb->data, skb->len, 0, (const struct sockaddr *) &l->in_addr,
+        sizeof(l->in_addr));
+  }
+  return (ret);
 }
 
 //*****************************************************************************
@@ -348,8 +377,8 @@ listener_send(struct rtap_listener* l, struct sk_buff* skb)
 static int
 proc_show(struct seq_file *file, void *arg)
 {
-  rtap_listener_t *listener = NULL;
-  rtap_listener_t *tmp = NULL;
+  struct rtap_listener *listener = NULL;
+  struct rtap_listener *tmp = NULL;
 
   // Iterate over all listeners in list
   spin_lock(&rtap_listeners.lock);
@@ -427,7 +456,7 @@ proc_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
   } // end if
   else if( (ret >= 2) && (strlen(ipaddr) > 1) )
   {
-    rtap_listener_t* l = listener_create();
+    struct rtap_listener* l = listener_create();
     if (listener_set_id(l, lid) || listener_set_ipaddr(l, ipaddr) ||
         listener_set_port(l, port))
     {
