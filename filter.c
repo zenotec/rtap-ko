@@ -71,11 +71,11 @@ typedef int
 // Function prototypes
 //*****************************************************************************
 
-int
-rtap_filter_all(struct rtap_filter *fp, struct sk_buff *skb);
-int
+static int
+rtap_filter_all(struct rtap_filter *f, struct sk_buff *skb);
+static int
 rtap_filter_radiotap(struct rtap_filter *fp, struct sk_buff *skb);
-int
+static int
 rtap_filter_80211(struct rtap_filter *fp, struct sk_buff *skb);
 
 //*****************************************************************************
@@ -452,8 +452,9 @@ rtap_chain_find(const char* name)
   return (ret);
 }
 
-//*****************************************************************************
-
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
 rtap_chain_remove(const char* name)
 {
@@ -482,8 +483,9 @@ rtap_chain_remove(const char* name)
   return (ret);
 }
 
-//*****************************************************************************
-
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
 rtap_chain_add(struct rtap_chain* chain)
 {
@@ -496,8 +498,9 @@ rtap_chain_add(struct rtap_chain* chain)
   return (0);
 }
 
-//*****************************************************************************
-
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
 rtap_chain_clear(void)
 {
@@ -526,17 +529,88 @@ rtap_chain_clear(void)
 }
 
 //*****************************************************************************
+// Filter Functions
+//*****************************************************************************
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int
+rtap_filter_all(struct rtap_filter *f, struct sk_buff *skb)
+{
+  int ret = -1;
+  if (f && (f->type == FILTER_TYPE_ALL) && skb)
+  {
+    switch (f->subtype)
+    {
+    case FILTER_SUBTYPE_ALL_SIZE:
+    {
+      int size = 0;
+      int cnt = sscanf(f->arg, "%d", &size);
+      if ((cnt == 1) && (skb->len <= size))
+      {
+        ret = rtap_rule_invoke(f->rule, skb);
+      }
+      break;
+    }
+    default:
+      break;
+    }
+  }
+  return(ret);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int
+rtap_filter_radiotap(struct rtap_filter *f, struct sk_buff *skb)
+{
+  int ret = -1;
+  if (f && (f->type == FILTER_TYPE_RADIOTAP) && skb)
+  {
+    switch (f->subtype)
+    {
+    default:
+      break;
+    }
+  }
+  return(ret);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int
+rtap_filter_80211(struct rtap_filter *f, struct sk_buff *skb)
+{
+  int ret = -1;
+  if (f && (f->type == FILTER_TYPE_80211) && skb)
+  {
+    switch (f->subtype)
+    {
+    default:
+      break;
+    }
+  }
+  return(ret);
+}
+
+//*****************************************************************************
 // Global Functions
 //*****************************************************************************
 
-//*****************************************************************************
-
+/******************************************************************************
+ *
+ ******************************************************************************/
 int
 rtap_filter_recv(struct sk_buff *skb)
 {
 
-  struct rtap_chain *chain = 0;
-  struct rtap_chain *tmp = 0;
+  struct rtap_chain *c = NULL;
+  struct rtap_chain *tmp_c = NULL;
+  struct rtap_filter* f = NULL;
+  struct rtap_filter* tmp_f = NULL;
   struct sk_buff* skb_cloned = 0;
 
   printk( KERN_INFO "RTAP: Received by filter\n");
@@ -546,9 +620,12 @@ rtap_filter_recv(struct sk_buff *skb)
 
   // Loop through all rtap_filters
   spin_lock(&rtap_chains.lock);
-  list_for_each_entry_safe(chain, tmp, &rtap_chains.list, list)
+  list_for_each_entry_safe(c, tmp_c, &rtap_chains.list, list)
   {
-    //rtap_filtertbl[f->type]( f, skb_cloned );
+    list_for_each_entry_safe(f, tmp_f, &c->filter.list, list)
+    {
+      rtap_filtertbl[f->type]( f, skb_cloned );
+    }
   } // end loop
   spin_unlock(&rtap_chains.lock);
 
@@ -568,11 +645,6 @@ rtap_filter_recv(struct sk_buff *skb)
 
 //*****************************************************************************
 
-void
-rtap_filter_all( struct rtap_filter *f, struct sk_buff *skb )
-{
-  return;
-}
 
 //*****************************************************************************
 

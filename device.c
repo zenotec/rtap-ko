@@ -41,7 +41,6 @@ typedef struct rtap_device
 {
     struct list_head list;
     spinlock_t lock;
-    struct net_device *netdev;
     struct packet_type pt;
 } rtap_device_t;
 
@@ -59,242 +58,270 @@ static rtap_device_t rtap_devices = { { 0 } };
 // Functions
 //*****************************************************************************
 
-//*****************************************************************************
-
-static struct net_device *
-get_devbyname( const char *devname )
+static void
+skb_display(struct sk_buff* skb)
 {
-
-    struct net_device *netdev = first_net_device( &init_net );
-    while ( netdev )
+  if (skb)
+  {
+    int size = (skb->len < 32) ? skb->len : 32;
+    unsigned char* p = skb->data;
+    printk( KERN_INFO "RTAP: Packet info: \n");
+    if (skb->dev && skb->dev->name)
+      printk( KERN_INFO "RTAP: \tDevice: %s\n", skb->dev->name);
+    printk( KERN_INFO "RTAP: \tTime: %lld\n", ktime_to_us(skb->tstamp));
+    printk( KERN_INFO "RTAP: \tLength: %u (%u)\n", skb->len, skb->data_len);
+    printk( KERN_INFO "RTAP: \tCloned: %hhu\n", skb->cloned);
+    printk( KERN_INFO "RTAP: \tUsers: %d\n", skb->users.counter);
+    while (size >= 8)
     {
-        if( ! strcmp( netdev->name, devname ) )
-        {
-            printk( KERN_INFO "RTAP: Found device: %s\n", netdev->name );
-            break;
-        } // end if
-        netdev = next_net_device( netdev );
-    } // end while
-
-    return( netdev );
-
-}
-
-//*****************************************************************************
-
-static int
-rtap_device_recv( struct sk_buff *skb, struct net_device *dev,
-                  struct packet_type *pt, struct net_device *orig_dev )
-{
-
-    // Pass to filters
-    rtap_filter_recv( skb );
-
-    // Free frame
-    kfree_skb( skb );
-
-    // Return success
-    return( 0 );
-}
-
-//*****************************************************************************
-
-static int
-rtap_device_remove( const char *devname )
-{
-    rtap_device_t *dev = 0;
-    rtap_device_t *tmp = 0;
-    int ret = -1;
-
-    // Search for device in list and remove
-    spin_lock( &rtap_devices.lock );
-    list_for_each_entry_safe( dev, tmp, &rtap_devices.list, list )
-    {
-        if( ! strcmp( dev->netdev->name, devname ) )
-        {
-            printk( KERN_INFO "RTAP: Removing device: %s\n", dev->netdev->name );
-            dev_remove_pack( &dev->pt );
-            list_del( &dev->list );
-            kfree( dev );
-            ret = 0;
-            break;
-        } // end if
-    } // end loop 
-    spin_unlock( &rtap_devices.lock );
-
-    // Return non-null network device pointer on success; null on error
-    return( ret );
+      printk( KERN_INFO "RTAP: \tData: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+          p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      p += 8;
+      size -= 8;
+    }
+  }
 }
 
 //*****************************************************************************
 
 static struct net_device *
-rtap_device_add( const char *devname )
+get_devbyname(const char *devname)
 {
-    rtap_device_t *dev = 0;
-    struct net_device *netdev = 0;
 
-    // First remove any existing devices with same name
-    rtap_device_remove( devname );
-
-    // Lookup network device by given name
-    netdev = get_devbyname( devname );
-    if( ! netdev )
+  struct net_device *netdev = first_net_device(&init_net);
+  while (netdev)
+  {
+    if (!strcmp(netdev->name, devname))
     {
-        printk( KERN_ERR "RTAP: Device '%s' not found\n", devname );
-        return( 0 );
+      printk( KERN_INFO "RTAP: Found device: %s\n", netdev->name);
+      break;
     } // end if
+    netdev = next_net_device(netdev);
+  } // end while
 
-    // Allocate new device list item
-    dev = kmalloc( sizeof(rtap_device_t), GFP_ATOMIC );
-    if( ! dev )
+  return (netdev);
+
+}
+
+//*****************************************************************************
+
+static int
+rtap_device_recv(struct sk_buff *skb, struct net_device *dev,
+    struct packet_type *pt, struct net_device *orig_dev)
+{
+
+  printk( KERN_INFO "RTAP:\n");
+  printk( KERN_INFO "RTAP: Received packet on device: %s (%s)\n", dev->name, orig_dev->name);
+  skb_display(skb);
+
+  // Pass to filters
+  rtap_filter_recv(skb);
+
+  // Free frame
+  kfree_skb(skb);
+
+  // Return success
+  return (0);
+}
+
+//*****************************************************************************
+
+static int
+rtap_device_remove(const char *devname)
+{
+  rtap_device_t *dev = 0;
+  rtap_device_t *tmp = 0;
+  int ret = -1;
+
+  // Search for device in list and remove
+  spin_lock(&rtap_devices.lock);
+  list_for_each_entry_safe(dev, tmp, &rtap_devices.list, list)
+  {
+    if( ! strcmp( dev->pt.dev->name, devname ) )
     {
-        printk( KERN_CRIT "RTAP: Cannot allocate memory: dev[%s]\n", devname );
-        return( 0 );
+      printk( KERN_INFO "RTAP: Removing device: %s\n", dev->pt.dev->name );
+      dev_remove_pack( &dev->pt );
+      list_del( &dev->list );
+      kfree( dev );
+      ret = 0;
+      break;
     } // end if
-    memset( (void *)dev, 0, sizeof( rtap_device_t ) );
+  } // end loop
+  spin_unlock(&rtap_devices.lock);
 
-    // Populate device list item
-    dev->netdev = netdev;
-    dev->pt.type = htons(ETH_P_ALL);
-    dev->pt.func = rtap_device_recv;
+  // Return non-null network device pointer on success; null on error
+  return (ret);
+}
 
-    // Add device list item to tail of device list
-    spin_lock( &rtap_devices.lock );
-    list_add_tail( &dev->list, &rtap_devices.list );
-    spin_unlock( &rtap_devices.lock );
+//*****************************************************************************
 
-    // Register for packet
-    dev_add_pack( &dev->pt );
+static struct net_device *
+rtap_device_add(const char *devname)
+{
+  rtap_device_t *dev = 0;
+  struct net_device *netdev = 0;
 
-    printk( KERN_INFO "RTAP: Added device: %s\n", devname );
+  // First remove any existing devices with same name
+  rtap_device_remove(devname);
 
-    // Return non-null network device pointer on success; null on error
-    return( netdev );
+  // Lookup network device by given name
+  netdev = get_devbyname(devname);
+  if (!netdev)
+  {
+    printk( KERN_ERR "RTAP: Device '%s' not found\n", devname);
+    return (0);
+  } // end if
+
+  // Allocate new device list item
+  dev = kmalloc(sizeof(rtap_device_t), GFP_ATOMIC);
+  if (!dev)
+  {
+    printk( KERN_CRIT "RTAP: Cannot allocate memory: dev[%s]\n", devname);
+    return (0);
+  } // end if
+  memset((void *) dev, 0, sizeof(rtap_device_t));
+
+  // Populate device list item
+  dev->pt.dev = netdev;
+  dev->pt.type = htons(ETH_P_ALL);
+  dev->pt.func = rtap_device_recv;
+
+  // Add device list item to tail of device list
+  spin_lock(&rtap_devices.lock);
+  list_add_tail(&dev->list, &rtap_devices.list);
+  spin_unlock(&rtap_devices.lock);
+
+  // Register for packet
+  dev_add_pack(&dev->pt);
+
+  printk( KERN_INFO "RTAP: Added device: %s\n", devname);
+
+  // Return non-null network device pointer on success; null on error
+  return (netdev);
 }
 
 //*****************************************************************************
 static int
-rtap_device_clear( void )
+rtap_device_clear(void)
 {
-    rtap_device_t *dev = 0;
-    rtap_device_t *tmp = 0;
+  rtap_device_t *dev = 0;
+  rtap_device_t *tmp = 0;
 
-    // Remove all devices from list
-    spin_lock( &rtap_devices.lock );
-    list_for_each_entry_safe( dev, tmp, &rtap_devices.list, list )
-    {
-        printk( KERN_INFO "RTAP: Removing device: %s\n", dev->netdev->name );
-        dev_remove_pack( &dev->pt );
-        list_del( &dev->list );
-        kfree( dev );
-    } // end loop 
-    spin_unlock( &rtap_devices.lock );
+  // Remove all devices from list
+  spin_lock(&rtap_devices.lock);
+  list_for_each_entry_safe(dev, tmp, &rtap_devices.list, list)
+  {
+    printk( KERN_INFO "RTAP: Removing device: %s\n", dev->pt.dev->name );
+    dev_remove_pack( &dev->pt );
+    list_del( &dev->list );
+    kfree( dev );
+  } // end loop
+  spin_unlock(&rtap_devices.lock);
 
-    return( 0 );
+  return (0);
 }
 
 //*****************************************************************************
 int
-rtap_device_init( void )
+rtap_device_init(void)
 {
-    spin_lock_init( &rtap_devices.lock );
-    INIT_LIST_HEAD( &rtap_devices.list );
-    return( 0 );
+  spin_lock_init(&rtap_devices.lock);
+  INIT_LIST_HEAD(&rtap_devices.list);
+  return (0);
 }
 
 //*****************************************************************************
 int
-rtap_device_exit( void )
+rtap_device_exit(void)
 {
-    return( rtap_device_clear() );
+  return (rtap_device_clear());
 }
 
 //*****************************************************************************
 //*****************************************************************************
 static int
-rtap_device_show( struct seq_file *file, void *arg )
+rtap_device_show(struct seq_file *file, void *arg)
 {
-    rtap_device_t *dev = 0;
-    rtap_device_t *tmp = 0;
+  rtap_device_t *dev = 0;
+  rtap_device_t *tmp = 0;
 
-    // Iterate over all devices in list
-    spin_lock( &rtap_devices.lock );
-    list_for_each_entry_safe( dev, tmp, &rtap_devices.list, list )
-    {
-        seq_printf( file, "dev[%s]\n", dev->netdev->name );
-    } // end loop 
-    spin_unlock( &rtap_devices.lock );
+  // Iterate over all devices in list
+  spin_lock(&rtap_devices.lock);
+  list_for_each_entry_safe(dev, tmp, &rtap_devices.list, list)
+  {
+    seq_printf( file, "dev[%s]\n", dev->pt.dev->name );
+  } // end loop
+  spin_unlock(&rtap_devices.lock);
 
-    return( 0 );
+  return (0);
 }
 
 //*****************************************************************************
 static int
-rtap_device_open( struct inode *inode, struct file *file )
+rtap_device_open(struct inode *inode, struct file *file)
 {
-    return( single_open( file, rtap_device_show, NULL ) );
+  return (single_open(file, rtap_device_show, NULL));
 }
 
 //*****************************************************************************
 static int
-rtap_device_close( struct inode *inode, struct file *file )
+rtap_device_close(struct inode *inode, struct file *file)
 {
-    return( single_release( inode, file ) );
+  return (single_release(inode, file));
 }
 
 //*****************************************************************************
 static ssize_t
-rtap_device_read( struct file *file, char __user *buf, size_t cnt, loff_t *off )
+rtap_device_read(struct file *file, char __user *buf, size_t cnt, loff_t *off)
 {
-    return( seq_read( file, buf, cnt, off ) );
+  return (seq_read(file, buf, cnt, off));
 }
 
 //*****************************************************************************
 static loff_t
-rtap_device_lseek( struct file *file, loff_t off, int cnt )
+rtap_device_lseek(struct file *file, loff_t off, int cnt)
 {
-    return( seq_lseek( file, off, cnt ) );
+  return (seq_lseek(file, off, cnt));
 }
 
 //*****************************************************************************
 static ssize_t
-rtap_device_write( struct file *file, const char __user *buf, size_t cnt, loff_t *off )
+rtap_device_write(struct file *file, const char __user *buf, size_t cnt, loff_t *off)
 {
-    char devstr[256+1] = { 0 };
-    char devname[256+1] = { 0 };
-    int ret = 0;
+  char devstr[256 + 1] = { 0 };
+  char devname[256 + 1] = { 0 };
+  int ret = 0;
 
-    cnt = (cnt >= 256) ? 256 : cnt;
-    copy_from_user( devstr, buf, cnt );
-    ret = sscanf( devstr, "%256s", devname );
+  cnt = (cnt >= 256) ? 256 : cnt;
+  copy_from_user(devstr, buf, cnt);
+  ret = sscanf(devstr, "%256s", devname);
 
-    if( (ret == 1) && (strlen(devname) == 1) && (devname[0] == '-') )
+  if ((ret == 1) && (strlen(devname) == 1) && (devname[0] == '-'))
+  {
+    rtap_device_clear();
+  } // end if
+  else if ((ret == 1) && (strlen(devname) > 1))
+  {
+    if (devname[0] == '-')
     {
-        rtap_device_clear();
+      rtap_device_remove(&devname[1]);
     } // end if
-    else if( (ret == 1) && (strlen(devname) > 1) )
+    else if (devname[0] == '+')
     {
-        if( devname[0] == '-' )
-        {
-            rtap_device_remove( &devname[1] );
-        } // end if
-        else if( devname[0] == '+' )
-        {
-            rtap_device_add( &devname[1] );
-        } // end else
-        else
-        {
-            rtap_device_add( devname );
-        } // end else
-    } // end else if
+      rtap_device_add(&devname[1]);
+    } // end else
     else
     {
-        printk( KERN_ERR "RTAP: Failed parsing device string: %s\n", devstr );
-        return( -1 );
+      rtap_device_add(devname);
     } // end else
+  } // end else if
+  else
+  {
+    printk( KERN_ERR "RTAP: Failed parsing device string: %s\n", devstr);
+    return (-1);
+  } // end else
 
-    return( cnt );
+  return (cnt);
 
 }
 

@@ -361,6 +361,19 @@ rtap_rule_findbyid(const rtap_rule_id_t rid)
   return (ret);
 }
 
+/******************************************************************************
+ *
+******************************************************************************/
+int
+rtap_rule_invoke(struct rtap_rule* r, struct sk_buff *skb)
+{
+  int ret = -1;
+  if (r && r->func)
+  {
+    ret = r->func(r, skb);
+  }
+  return(ret);
+}
 
 //*****************************************************************************
 // Proc Filesystem Functions

@@ -359,10 +359,11 @@ int
 listener_send(struct rtap_listener* l, struct sk_buff* skb)
 {
   int ret = 0;
-  if (l)
+  if (l && skb)
   {
-    ret = ksendto(l->sockfd, skb->data, skb->len, 0, (const struct sockaddr *) &l->in_addr,
-        sizeof(l->in_addr));
+    printk( KERN_INFO "RTAP: Sending to listener: %s:%hu\n", l->ipaddr, l->port);
+    ret = ksendto(l->sockfd, skb->data, skb->len, 0,
+        (const struct sockaddr *) &l->in_addr, sizeof(l->in_addr));
   }
   return (ret);
 }

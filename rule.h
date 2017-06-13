@@ -57,13 +57,16 @@ rtap_rule_init( void );
 extern int
 rtap_rule_exit( void );
 
-rtap_rule_id_t
+extern rtap_rule_id_t
 rtap_rule_get_id(struct rtap_rule* r);
 
-rtap_rule_action_t
+extern rtap_rule_action_t
 rtap_rule_get_action(struct rtap_rule* r);
 
 extern struct rtap_rule*
 rtap_rule_findbyid(rtap_rule_id_t rid);
+
+extern int
+rtap_rule_invoke(struct rtap_rule* r, struct sk_buff *skb);
 
 #endif
