@@ -203,8 +203,6 @@ rtap_rule_action_forward(struct rtap_rule* r, struct sk_buff *skb)
     return (-1);
   }
 
-  printk( KERN_INFO "RTAP: Forward action rule\n");
-
   listener_send(r->arg.l, skb);
 
   // Return NULL on success; negative on error

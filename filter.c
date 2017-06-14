@@ -613,7 +613,7 @@ rtap_filter_recv(struct sk_buff *skb)
   struct rtap_filter* tmp_f = NULL;
   struct sk_buff* skb_cloned = 0;
 
-  printk( KERN_INFO "RTAP: Received by filter\n");
+//  printk( KERN_INFO "RTAP: Received by filter\n");
 
   // Clone socket buffer before messing with it
   skb_cloned = skb_clone(skb, GFP_ATOMIC);

@@ -110,9 +110,9 @@ ssize_t ksendto( ksocket_t socket, void *message, size_t length, int flags,
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(3,18,0)
     len = sock_sendmsg( sk, &msg, length );
 #else
-	printk( KERN_INFO "RTAP: ksendto(): Sending %d bytes\n", length );
-    len = length;
-//    len = sock_sendmsg( sk, &msg );
+//	printk( KERN_INFO "RTAP: ksendto(): Sending %d bytes\n", (int)length );
+//    len = length;
+    len = sock_sendmsg( sk, &msg );
 #endif
     set_fs( fs );
 	

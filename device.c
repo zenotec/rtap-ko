@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/list.h>
+#include <linux/kthread.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 
@@ -37,12 +38,25 @@
 // Type definitions
 //*****************************************************************************
 
-typedef struct rtap_device
+struct rtap_device
 {
     struct list_head list;
     spinlock_t lock;
     struct packet_type pt;
-} rtap_device_t;
+    struct kthread_worker kworker;
+    struct task_struct* kworker_task;
+};
+
+struct rtap_device_kwork
+{
+  struct kthread_work kwork;
+  struct net_device *dev;
+  struct packet_type *pt;
+  struct sk_buff* skb;
+};
+
+#define to_rtap_device(p,e)  ((container_of((p), struct rtap_device, e)))
+#define to_rtap_device_kwork(p,e)  ((container_of((p), struct rtap_device_kwork, e)))
 
 //*****************************************************************************
 // Variables
@@ -52,38 +66,52 @@ typedef struct rtap_device
 
 /* Local */
 
-static rtap_device_t rtap_devices = { { 0 } };
+static struct rtap_device rtap_devices = { { 0 } };
+
+
 
 //*****************************************************************************
-// Functions
+// Local Functions
 //*****************************************************************************
 
-static void
-skb_display(struct sk_buff* skb)
-{
-  if (skb)
-  {
-    int size = (skb->len < 32) ? skb->len : 32;
-    unsigned char* p = skb->data;
-    printk( KERN_INFO "RTAP: Packet info: \n");
-    if (skb->dev && skb->dev->name)
-      printk( KERN_INFO "RTAP: \tDevice: %s\n", skb->dev->name);
-    printk( KERN_INFO "RTAP: \tTime: %lld\n", ktime_to_us(skb->tstamp));
-    printk( KERN_INFO "RTAP: \tLength: %u (%u)\n", skb->len, skb->data_len);
-    printk( KERN_INFO "RTAP: \tCloned: %hhu\n", skb->cloned);
-    printk( KERN_INFO "RTAP: \tUsers: %d\n", skb->users.counter);
-    while (size >= 8)
-    {
-      printk( KERN_INFO "RTAP: \tData: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
-          p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-      p += 8;
-      size -= 8;
-    }
-  }
-}
+static struct rtap_device*
+rtap_device_findbyname(const char* devname);
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+//static void
+//skb_display(struct sk_buff* skb)
+//{
+//  if (skb)
+//  {
+//    int size = (skb->len < 32) ? skb->len : 32;
+//    unsigned char* p = skb->data;
+//    printk( KERN_INFO "RTAP: Packet info: \n");
+//    if (skb->dev && skb->dev->name)
+//      printk( KERN_INFO "RTAP: \tDevice: %s\n", skb->dev->name);
+//    printk( KERN_INFO "RTAP: \tTime: %lld\n", ktime_to_us(skb->tstamp));
+//    printk( KERN_INFO "RTAP: \tLength: %u (%u)\n", skb->len, skb->data_len);
+//    printk( KERN_INFO "RTAP: \tCloned: %hhu\n", skb->cloned);
+//    printk( KERN_INFO "RTAP: \tUsers: %d\n", skb->users.counter);
+//    while (size >= 8)
+//    {
+//      printk( KERN_INFO "RTAP: \tData: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+//          p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+//      p += 8;
+//      size -= 8;
+//    }
+//  }
+//}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 static struct net_device *
 get_devbyname(const char *devname)
 {
@@ -103,34 +131,92 @@ get_devbyname(const char *devname)
 
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
+static void
+rtap_device_rx_worker(struct kthread_work* work)
+{
 
+  if (work)
+  {
+    struct rtap_device_kwork* wrk = NULL;
+    wrk = to_rtap_device_kwork(work, kwork);
+
+//    printk( KERN_INFO "RTAP:\n");
+//    printk( KERN_INFO "RTAP: Received packet on device: %s\n", wrk->dev->name);
+//    skb_display(wrk->skb);
+
+    // Forward packet to filter
+    rtap_filter_recv(wrk->skb);
+
+    // Free frame
+    kfree_skb(wrk->skb);
+    kfree(wrk);
+  }
+
+  return;
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+//static void
+//rtap_device_tx_worker(struct kthread_work* work)
+//{
+//  struct rtap_device_kwork* wrk = NULL;
+//  printk( KERN_INFO "RTAP: rtap_device_tx_worker()\n");
+//  if (work)
+//  {
+//    wrk = to_rtap_device_kwork(work, kwork);
+//  }
+//  return;
+//}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
 rtap_device_recv(struct sk_buff *skb, struct net_device *dev,
     struct packet_type *pt, struct net_device *orig_dev)
 {
 
-  printk( KERN_INFO "RTAP:\n");
-  printk( KERN_INFO "RTAP: Received packet on device: %s (%s)\n", dev->name, orig_dev->name);
-  skb_display(skb);
+  struct rtap_device* d = NULL;
 
-  // Pass to filters
-  rtap_filter_recv(skb);
+  d = rtap_device_findbyname(dev->name);
+  if (d)
+  {
+    struct rtap_device_kwork* wrk = NULL;
+    wrk = kmalloc(sizeof(struct rtap_device_kwork), GFP_KERNEL);
+    if (!wrk)
+    {
+      printk( KERN_CRIT "RTAP: Cannot allocate memory\n");
+      return (-1);
+    } // end if
+    memset((void *) wrk, 0, sizeof(struct rtap_device_kwork));
 
-  // Free frame
-  kfree_skb(skb);
+    // Initialize work structure
+    init_kthread_work(&wrk->kwork, rtap_device_rx_worker);
+    wrk->dev = dev;
+    wrk->pt = pt;
+    wrk->skb = skb;
+
+    // Queue work
+    queue_kthread_work(&d->kworker, &wrk->kwork);
+  }
 
   // Return success
   return (0);
 }
 
-//*****************************************************************************
-
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
 rtap_device_remove(const char *devname)
 {
-  rtap_device_t *dev = 0;
-  rtap_device_t *tmp = 0;
+  struct rtap_device *dev = 0;
+  struct rtap_device *tmp = 0;
   int ret = -1;
 
   // Search for device in list and remove
@@ -142,6 +228,7 @@ rtap_device_remove(const char *devname)
       printk( KERN_INFO "RTAP: Removing device: %s\n", dev->pt.dev->name );
       dev_remove_pack( &dev->pt );
       list_del( &dev->list );
+      kthread_stop(dev->kworker_task);
       kfree( dev );
       ret = 0;
       break;
@@ -153,12 +240,13 @@ rtap_device_remove(const char *devname)
   return (ret);
 }
 
-//*****************************************************************************
-
+/******************************************************************************
+ *
+ ******************************************************************************/
 static struct net_device *
 rtap_device_add(const char *devname)
 {
-  rtap_device_t *dev = 0;
+  struct rtap_device *dev = 0;
   struct net_device *netdev = 0;
 
   // First remove any existing devices with same name
@@ -173,18 +261,22 @@ rtap_device_add(const char *devname)
   } // end if
 
   // Allocate new device list item
-  dev = kmalloc(sizeof(rtap_device_t), GFP_ATOMIC);
+  dev = kmalloc(sizeof(struct rtap_device), GFP_ATOMIC);
   if (!dev)
   {
     printk( KERN_CRIT "RTAP: Cannot allocate memory: dev[%s]\n", devname);
     return (0);
   } // end if
-  memset((void *) dev, 0, sizeof(rtap_device_t));
+  memset((void *) dev, 0, sizeof(struct rtap_device));
 
   // Populate device list item
   dev->pt.dev = netdev;
   dev->pt.type = htons(ETH_P_ALL);
   dev->pt.func = rtap_device_recv;
+
+  // Initialize workers
+  init_kthread_worker(&dev->kworker);
+  dev->kworker_task = kthread_run(kthread_worker_fn, &dev->kworker, "rtap-%s", devname);
 
   // Add device list item to tail of device list
   spin_lock(&rtap_devices.lock);
@@ -200,12 +292,14 @@ rtap_device_add(const char *devname)
   return (netdev);
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
 rtap_device_clear(void)
 {
-  rtap_device_t *dev = 0;
-  rtap_device_t *tmp = 0;
+  struct rtap_device *dev = NULL;
+  struct rtap_device *tmp = NULL;
 
   // Remove all devices from list
   spin_lock(&rtap_devices.lock);
@@ -214,6 +308,7 @@ rtap_device_clear(void)
     printk( KERN_INFO "RTAP: Removing device: %s\n", dev->pt.dev->name );
     dev_remove_pack( &dev->pt );
     list_del( &dev->list );
+    kthread_stop(dev->kworker_task);
     kfree( dev );
   } // end loop
   spin_unlock(&rtap_devices.lock);
@@ -221,7 +316,32 @@ rtap_device_clear(void)
   return (0);
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
+static struct rtap_device*
+rtap_device_findbyname(const char* devname)
+{
+  struct rtap_device* dev = NULL;
+  struct rtap_device *d = NULL;
+
+  spin_lock(&rtap_devices.lock);
+  list_for_each_entry(d, &rtap_devices.list, list)
+  {
+    if(! (strcmp(d->pt.dev->name, devname)) )
+    {
+      dev = d;
+      break;
+    }
+  } // end loop
+  spin_unlock(&rtap_devices.lock);
+
+  return(dev);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 int
 rtap_device_init(void)
 {
@@ -230,20 +350,23 @@ rtap_device_init(void)
   return (0);
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 int
 rtap_device_exit(void)
 {
   return (rtap_device_clear());
 }
 
-//*****************************************************************************
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
-rtap_device_show(struct seq_file *file, void *arg)
+proc_show(struct seq_file *file, void *arg)
 {
-  rtap_device_t *dev = 0;
-  rtap_device_t *tmp = 0;
+  struct rtap_device *dev = 0;
+  struct rtap_device *tmp = 0;
 
   // Iterate over all devices in list
   spin_lock(&rtap_devices.lock);
@@ -256,37 +379,47 @@ rtap_device_show(struct seq_file *file, void *arg)
   return (0);
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
-rtap_device_open(struct inode *inode, struct file *file)
+proc_open(struct inode *inode, struct file *file)
 {
-  return (single_open(file, rtap_device_show, NULL));
+  return (single_open(file, proc_show, NULL));
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 static int
-rtap_device_close(struct inode *inode, struct file *file)
+proc_close(struct inode *inode, struct file *file)
 {
   return (single_release(inode, file));
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 static ssize_t
-rtap_device_read(struct file *file, char __user *buf, size_t cnt, loff_t *off)
+proc_read(struct file *file, char __user *buf, size_t cnt, loff_t *off)
 {
   return (seq_read(file, buf, cnt, off));
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 static loff_t
-rtap_device_lseek(struct file *file, loff_t off, int cnt)
+proc_lseek(struct file *file, loff_t off, int cnt)
 {
   return (seq_lseek(file, off, cnt));
 }
 
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 static ssize_t
-rtap_device_write(struct file *file, const char __user *buf, size_t cnt, loff_t *off)
+proc_write(struct file *file, const char __user *buf, size_t cnt, loff_t *off)
 {
   char devstr[256 + 1] = { 0 };
   char devname[256 + 1] = { 0 };
@@ -325,15 +458,16 @@ rtap_device_write(struct file *file, const char __user *buf, size_t cnt, loff_t 
 
 }
 
-//*****************************************************************************
-//*****************************************************************************
+/******************************************************************************
+ *
+ ******************************************************************************/
 const struct file_operations rtap_device_fops =
 {
     .owner      = THIS_MODULE,
-    .open       = rtap_device_open,
-    .release    = rtap_device_close,
-    .read       = rtap_device_read,
-    .llseek     = rtap_device_lseek,
-    .write      = rtap_device_write,
+    .open       = proc_open,
+    .release    = proc_close,
+    .read       = proc_read,
+    .llseek     = proc_lseek,
+    .write      = proc_write,
 };
 
