@@ -24,6 +24,7 @@
 // Includes
 //*****************************************************************************
 
+#include <linux/types.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/list.h>
@@ -45,6 +46,8 @@ struct rtap_device
     struct packet_type pt;
     struct kthread_worker kworker;
     struct task_struct* kworker_task;
+    u32 pkts;
+    u64 bytes;
 };
 
 struct rtap_device_kwork
@@ -53,6 +56,20 @@ struct rtap_device_kwork
   struct net_device *dev;
   struct packet_type *pt;
   struct sk_buff* skb;
+  u32 pkts;
+  u64 bytes;
+};
+
+struct rtap_device_skbmeta
+{
+  u32 magic; // 'RTAP'
+  u8 hdrlen;
+  u8 rsvd;
+  u8 ethhdr[ETH_ALEN];
+  u32 pkts;
+  u64 bytes;
+  u32 secs;
+  u32 nsecs;
 };
 
 #define to_rtap_device(p,e)  ((container_of((p), struct rtap_device, e)))
@@ -85,29 +102,36 @@ rtap_device_findbyname(const char* devname);
 /******************************************************************************
  *
  ******************************************************************************/
-//static void
-//skb_display(struct sk_buff* skb)
-//{
-//  if (skb)
-//  {
-//    int size = (skb->len < 32) ? skb->len : 32;
-//    unsigned char* p = skb->data;
-//    printk( KERN_INFO "RTAP: Packet info: \n");
-//    if (skb->dev && skb->dev->name)
-//      printk( KERN_INFO "RTAP: \tDevice: %s\n", skb->dev->name);
-//    printk( KERN_INFO "RTAP: \tTime: %lld\n", ktime_to_us(skb->tstamp));
-//    printk( KERN_INFO "RTAP: \tLength: %u (%u)\n", skb->len, skb->data_len);
-//    printk( KERN_INFO "RTAP: \tCloned: %hhu\n", skb->cloned);
-//    printk( KERN_INFO "RTAP: \tUsers: %d\n", skb->users.counter);
-//    while (size >= 8)
-//    {
-//      printk( KERN_INFO "RTAP: \tData: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
-//          p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-//      p += 8;
-//      size -= 8;
-//    }
-//  }
-//}
+static void
+skb_display(struct sk_buff* skb)
+{
+  if (skb)
+  {
+    int size = (skb->len < 32) ? skb->len : 32;
+    unsigned char* p = skb->data;
+    printk( KERN_INFO "RTAP: Packet info: \n");
+    if (skb->dev && skb->dev->name)
+    {
+      printk( KERN_INFO "RTAP: \tDevice: %s\n", skb->dev->name);
+      printk( KERN_INFO "RTAP: \tAddress: %02x:%02x:%02x:%02x:%02x:%02x\n",
+          skb->dev->perm_addr[0], skb->dev->perm_addr[1], skb->dev->perm_addr[2],
+          skb->dev->perm_addr[3], skb->dev->perm_addr[4], skb->dev->perm_addr[5]);
+    }
+    printk( KERN_INFO "RTAP: \tTime: %lld\n", ktime_to_ns(skb->tstamp));
+    printk( KERN_INFO "RTAP: \tLength: %u (%u)\n", skb->len, skb->data_len);
+    printk( KERN_INFO "RTAP: \tCloned: %hhu\n", skb->cloned);
+    printk( KERN_INFO "RTAP: \tUsers: %d\n", skb->users.counter);
+    printk( KERN_INFO "RTAP: \tHeadroom: %d\n", skb_headroom(skb));
+    printk( KERN_INFO "RTAP: \tTailroom: %d\n", skb_tailroom(skb));
+    while (size >= 8)
+    {
+      printk( KERN_INFO "RTAP: \tData: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+          p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      p += 8;
+      size -= 8;
+    }
+  }
+}
 
 /******************************************************************************
  *
@@ -140,17 +164,38 @@ rtap_device_rx_worker(struct kthread_work* work)
 
   if (work)
   {
+    struct sk_buff* nskb = NULL;
+    struct rtap_device_skbmeta* skbmeta = NULL;
+    struct timespec ts = { 0 };
     struct rtap_device_kwork* wrk = NULL;
     wrk = to_rtap_device_kwork(work, kwork);
 
-//    printk( KERN_INFO "RTAP:\n");
-//    printk( KERN_INFO "RTAP: Received packet on device: %s\n", wrk->dev->name);
-//    skb_display(wrk->skb);
+    printk( KERN_INFO "RTAP:\n");
+    printk( KERN_INFO "RTAP: Received packet on device: %s\n", wrk->dev->name);
+    skb_display(wrk->skb);
+
+    // Convert sk_buff ktime_t timestamp
+    ts = ktime_to_timespec(wrk->skb->tstamp);
+
+    // Create copy of socket buffer while adding headroom for metadata
+    nskb = skb_copy_expand(wrk->skb, sizeof(struct rtap_device_skbmeta), 0, GFP_ATOMIC);
+    skbmeta = (struct rtap_device_skbmeta* )skb_push(nskb, sizeof(struct rtap_device_skbmeta));
+    skbmeta->magic = cpu_to_be32(0x52544150);
+    skbmeta->hdrlen = sizeof(struct rtap_device_skbmeta);
+    memcpy(&skbmeta->ethhdr, &wrk->dev->perm_addr, ETH_ALEN);
+    skbmeta->rsvd = 0;
+    skbmeta->pkts = cpu_to_be32(wrk->pkts);
+    skbmeta->bytes = cpu_to_be64(wrk->bytes);
+    skbmeta->secs = cpu_to_be32(ts.tv_sec);
+    skbmeta->nsecs = cpu_to_be32(ts.tv_nsec);
+
+    skb_display(nskb);
 
     // Forward packet to filter
     rtap_filter_recv(wrk->skb);
 
     // Free frame
+    kfree_skb(nskb);
     kfree_skb(wrk->skb);
     kfree(wrk);
   }
@@ -195,11 +240,17 @@ rtap_device_recv(struct sk_buff *skb, struct net_device *dev,
     } // end if
     memset((void *) wrk, 0, sizeof(struct rtap_device_kwork));
 
+    // Update device counters
+    d->pkts++;
+    d->bytes += skb->len;
+
     // Initialize work structure
     init_kthread_work(&wrk->kwork, rtap_device_rx_worker);
     wrk->dev = dev;
     wrk->pt = pt;
     wrk->skb = skb;
+    wrk->pkts = d->pkts;
+    wrk->bytes = d->bytes;
 
     // Queue work
     queue_kthread_work(&d->kworker, &wrk->kwork);
@@ -372,7 +423,8 @@ proc_show(struct seq_file *file, void *arg)
   spin_lock(&rtap_devices.lock);
   list_for_each_entry_safe(dev, tmp, &rtap_devices.list, list)
   {
-    seq_printf( file, "dev[%s]\n", dev->pt.dev->name );
+    seq_printf( file, "dev[%s]\tpkts[%u]\tbytes[%llu]\n",
+        dev->pt.dev->name, dev->pkts, dev->bytes );
   } // end loop
   spin_unlock(&rtap_devices.lock);
 

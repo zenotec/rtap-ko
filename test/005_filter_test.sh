@@ -14,7 +14,7 @@ echo "1 2 1" | sudo tee /proc/rtap/rules
 dmesg 
 cat /proc/rtap/rules
 
-echo "default 1 1 1 1 512" | sudo tee /proc/rtap/filters
+echo "default 1 1 1 1 1520" | sudo tee /proc/rtap/filters
 dmesg
 cat /proc/rtap/filters 
 

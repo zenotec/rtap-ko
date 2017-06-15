@@ -25,7 +25,7 @@
 #define __RTAP_KO_H__
 
 
-#define DRIVER_VERSION  "v0.2.0"
+#define DRIVER_VERSION  "v0.2.1"
 #define DRIVER_AUTHOR   "Kevin Mahoney <kevin.mahoney@zenotec.net>"
 #define DRIVER_NAME     "rtap"
 #define DRIVER_DESC     "Wireless packet forwarder with simple filtering capabilities"
