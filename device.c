@@ -47,7 +47,7 @@ struct rtap_device
     struct kthread_worker kworker;
     struct task_struct* kworker_task;
     u32 pkts;
-    u64 bytes;
+    u32 bytes;
 };
 
 struct rtap_device_kwork
@@ -57,23 +57,28 @@ struct rtap_device_kwork
   struct packet_type *pt;
   struct sk_buff* skb;
   u32 pkts;
-  u64 bytes;
+  u32 bytes;
 };
 
 struct rtap_device_skbmeta
 {
   u32 magic; // 'RTAP'
+  u8 ver;
   u8 hdrlen;
-  u8 rsvd;
-  u8 ethhdr[ETH_ALEN];
-  u32 pkts;
-  u64 bytes;
+  u8 ethaddr[ETH_ALEN];
+  u32 pktid;
+  u32 len;
+  u32 bytecnt;
   u32 secs;
   u32 nsecs;
 };
 
 #define to_rtap_device(p,e)  ((container_of((p), struct rtap_device, e)))
 #define to_rtap_device_kwork(p,e)  ((container_of((p), struct rtap_device_kwork, e)))
+
+#define RTAP_MAGIC              0x52544150 // 'RTAP'
+#define RTAP_VER                0x01 // 0.1
+
 
 //*****************************************************************************
 // Variables
@@ -180,12 +185,13 @@ rtap_device_rx_worker(struct kthread_work* work)
     // Create copy of socket buffer while adding headroom for metadata
     nskb = skb_copy_expand(wrk->skb, sizeof(struct rtap_device_skbmeta), 0, GFP_ATOMIC);
     skbmeta = (struct rtap_device_skbmeta* )skb_push(nskb, sizeof(struct rtap_device_skbmeta));
-    skbmeta->magic = cpu_to_be32(0x52544150);
+    skbmeta->magic = cpu_to_be32(RTAP_MAGIC);
+    skbmeta->ver = RTAP_VER;
     skbmeta->hdrlen = sizeof(struct rtap_device_skbmeta);
-    memcpy(&skbmeta->ethhdr, &wrk->dev->perm_addr, ETH_ALEN);
-    skbmeta->rsvd = 0;
-    skbmeta->pkts = cpu_to_be32(wrk->pkts);
-    skbmeta->bytes = cpu_to_be64(wrk->bytes);
+    memcpy(&skbmeta->ethaddr, &wrk->dev->perm_addr, ETH_ALEN);
+    skbmeta->pktid = cpu_to_be32(wrk->pkts);
+    skbmeta->len = cpu_to_be32(nskb->len);
+    skbmeta->bytecnt = cpu_to_be32(wrk->bytes);
     skbmeta->secs = cpu_to_be32(ts.tv_sec);
     skbmeta->nsecs = cpu_to_be32(ts.tv_nsec);
 
@@ -423,7 +429,7 @@ proc_show(struct seq_file *file, void *arg)
   spin_lock(&rtap_devices.lock);
   list_for_each_entry_safe(dev, tmp, &rtap_devices.list, list)
   {
-    seq_printf( file, "dev[%s]\tpkts[%u]\tbytes[%llu]\n",
+    seq_printf( file, "dev[%s]\tpkts[%u]\tbytes[%u]\n",
         dev->pt.dev->name, dev->pkts, dev->bytes );
   } // end loop
   spin_unlock(&rtap_devices.lock);
