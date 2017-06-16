@@ -63,13 +63,13 @@ struct rtap_device_kwork
 struct rtap_device_skbmeta
 {
   u32 magic; // 'RTAP'
-  u8 ver;
-  u8 hdrlen;
-  u8 ethaddr[ETH_ALEN];
-  u32 pktid;
-  u32 len;
-  u32 bytecnt;
-  u32 secs;
+  u8 ver; // Metadata header version; currently 0x01
+  u8 hdrlen; // Metadata header length; currently 0x20
+  u8 ethaddr[ETH_ALEN]; // Listening device address
+  u32 pktid; // Cumulative packet count
+  u32 len; // Packet length including metadata header
+  u32 bytecnt; // Cumulative byte count as seen by listening device
+  u32 secs; // Time packet was received by listening device
   u32 nsecs;
 };
 
@@ -107,36 +107,39 @@ rtap_device_findbyname(const char* devname);
 /******************************************************************************
  *
  ******************************************************************************/
-//static void
-//skb_display(struct sk_buff* skb)
-//{
-//  if (skb)
-//  {
-//    int size = (skb->len < 32) ? skb->len : 32;
-//    unsigned char* p = skb->data;
-//    printk( KERN_INFO "RTAP: Packet info: \n");
-//    if (skb->dev && skb->dev->name)
-//    {
-//      printk( KERN_INFO "RTAP: \tDevice: %s\n", skb->dev->name);
-//      printk( KERN_INFO "RTAP: \tAddress: %02x:%02x:%02x:%02x:%02x:%02x\n",
-//          skb->dev->perm_addr[0], skb->dev->perm_addr[1], skb->dev->perm_addr[2],
-//          skb->dev->perm_addr[3], skb->dev->perm_addr[4], skb->dev->perm_addr[5]);
-//    }
-//    printk( KERN_INFO "RTAP: \tTime: %lld\n", ktime_to_ns(skb->tstamp));
-//    printk( KERN_INFO "RTAP: \tLength: %u (%u)\n", skb->len, skb->data_len);
-//    printk( KERN_INFO "RTAP: \tCloned: %hhu\n", skb->cloned);
-//    printk( KERN_INFO "RTAP: \tUsers: %d\n", skb->users.counter);
-//    printk( KERN_INFO "RTAP: \tHeadroom: %d\n", skb_headroom(skb));
-//    printk( KERN_INFO "RTAP: \tTailroom: %d\n", skb_tailroom(skb));
-//    while (size >= 8)
-//    {
-//      printk( KERN_INFO "RTAP: \tData: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
-//          p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-//      p += 8;
-//      size -= 8;
-//    }
-//  }
-//}
+static void
+skb_display(struct sk_buff* skb)
+{
+  if (skb)
+  {
+    int size = (skb->len < 32) ? skb->len : 32;
+    unsigned char* p = skb->data;
+    printk( KERN_INFO "RTAP: Packet info: \n");
+    printk( KERN_INFO "RTAP: \tPrev: %p\n", skb->prev);
+    printk( KERN_INFO "RTAP: \tNext: %p\n", skb->next);
+    if (skb->dev && skb->dev->name)
+    {
+      printk( KERN_INFO "RTAP: \tDevice: %s\n", skb->dev->name);
+      printk( KERN_INFO "RTAP: \tAddress: %02x:%02x:%02x:%02x:%02x:%02x\n",
+          skb->dev->perm_addr[0], skb->dev->perm_addr[1], skb->dev->perm_addr[2],
+          skb->dev->perm_addr[3], skb->dev->perm_addr[4], skb->dev->perm_addr[5]);
+    }
+    printk( KERN_INFO "RTAP: \tTime: %lld\n", ktime_to_ns(skb->tstamp));
+    printk( KERN_INFO "RTAP: \tType: %hhu\n", skb->pkt_type);
+    printk( KERN_INFO "RTAP: \tLength: %u / %u / %u\n", skb->len, skb->data_len, skb->truesize);
+    printk( KERN_INFO "RTAP: \tCloned: %hhu\n", skb->cloned);
+    printk( KERN_INFO "RTAP: \tUsers: %d\n", skb->users.counter);
+    printk( KERN_INFO "RTAP: \tHeadroom: %d\n", skb_headroom(skb));
+    printk( KERN_INFO "RTAP: \tTailroom: %d\n", skb_tailroom(skb));
+    while (size >= 8)
+    {
+      printk( KERN_INFO "RTAP: \tData: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+          p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      p += 8;
+      size -= 8;
+    }
+  }
+}
 
 /******************************************************************************
  *
@@ -195,7 +198,12 @@ rtap_device_rx_worker(struct kthread_work* work)
     skbmeta->secs = cpu_to_be32(ts.tv_sec);
     skbmeta->nsecs = cpu_to_be32(ts.tv_nsec);
 
-//    skb_display(nskb);
+    if (nskb->next || nskb->prev || nskb->data_len)
+    {
+      // Flag this as a possible loss of packet data
+      printk( KERN_WARNING "RTAP: Possible data loss");
+      skb_display(nskb);
+    }
 
     // Forward packet to filter
     rtap_filter_recv(nskb);
