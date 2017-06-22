@@ -293,16 +293,17 @@ rtap_device_recv(struct sk_buff *skb, struct net_device *dev,
 {
 
   int ret = 0;
-  struct rtap_device_kwork* wrk = rtap_device_kwork_alloc();
   struct rtap_device* d = rtap_device_findbyname(dev->name);
 
-  if (wrk)
+  if (d)
   {
-    if (d)
-    {
-      // Lock device list
-      spin_lock(&rtap_devices.lock);
+    struct rtap_device_kwork* wrk = rtap_device_kwork_alloc();
 
+    // Lock device list
+    spin_lock(&rtap_devices.lock);
+
+    if (wrk)
+    {
       // Initialize work structure
       memset((void *) wrk, 0, sizeof(struct rtap_device_kwork));
 
@@ -320,20 +321,19 @@ rtap_device_recv(struct sk_buff *skb, struct net_device *dev,
 
       // Queue work
       queue_kthread_work(&d->kworker, &wrk->kwork);
-
-      // Unlock device list
-      spin_unlock(&rtap_devices.lock);
     }
     else
     {
-      printk( KERN_WARNING "RTAP: Cannot find device: %s\n", dev->name);
-      rtap_device_kwork_free(wrk);
       ret = -1;
+      d->wrk_drop++;
     }
+
+    // Unlock device list
+    spin_unlock(&rtap_devices.lock);
   }
   else
   {
-    printk( KERN_WARNING "RTAP: Dropping packet\n");
+    printk( KERN_WARNING "RTAP: Cannot find device: %s\n", dev->name);
     ret = -1;
   }
 
