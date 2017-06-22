@@ -46,6 +46,9 @@ struct rtap_device
     struct packet_type pt;
     struct kthread_worker kworker;
     struct task_struct* kworker_task;
+    u8 wrk_count;
+    u8 wrk_highwater;
+    u16 wrk_drop;
     u32 pkts;
     u32 bytes;
 };
@@ -78,7 +81,14 @@ struct rtap_device_skbmeta
 
 #define RTAP_MAGIC              0x52544150 // 'RTAP'
 #define RTAP_VER                0x01 // 0.1
+#define RTAP_DEVICE_KWORK_MAX   0x10
 
+struct rtap_device_kwork_tbl
+{
+  u32 freelist_index;
+  struct rtap_device_kwork* freelist[RTAP_DEVICE_KWORK_MAX];
+  struct rtap_device_kwork data[RTAP_DEVICE_KWORK_MAX];
+};
 
 //*****************************************************************************
 // Variables
@@ -89,8 +99,7 @@ struct rtap_device_skbmeta
 /* Local */
 
 static struct rtap_device rtap_devices = { { 0 } };
-
-
+static struct rtap_device_kwork_tbl rtap_kwork_tbl;
 
 //*****************************************************************************
 // Local Functions
@@ -166,6 +175,44 @@ get_devbyname(const char *devname)
 /******************************************************************************
  *
  ******************************************************************************/
+static struct rtap_device_kwork*
+rtap_device_kwork_alloc(void)
+{
+  struct rtap_device_kwork* wrk = NULL;
+
+  spin_lock(&rtap_devices.lock);
+  if (rtap_kwork_tbl.freelist_index)
+  {
+    rtap_kwork_tbl.freelist_index--;
+    //  printk( KERN_INFO "RTAP: Allocating kwork: %u\n", rtap_kwork_tbl.freelist_index);
+    wrk = rtap_kwork_tbl.freelist[rtap_kwork_tbl.freelist_index];
+    rtap_kwork_tbl.freelist[rtap_kwork_tbl.freelist_index] = NULL;
+  }
+  spin_unlock(&rtap_devices.lock);
+
+  return(wrk);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static void
+rtap_device_kwork_free(struct rtap_device_kwork* wrk)
+{
+  if (wrk)
+  {
+    // Return work back to free list
+    spin_lock(&rtap_devices.lock);
+//    printk( KERN_INFO "RTAP: Freeing kwork: %u\n", rtap_kwork_tbl.freelist_index);
+    rtap_kwork_tbl.freelist[rtap_kwork_tbl.freelist_index] = wrk;
+    rtap_kwork_tbl.freelist_index++;
+    spin_unlock(&rtap_devices.lock);
+  }
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 static void
 rtap_device_rx_worker(struct kthread_work* work)
 {
@@ -213,7 +260,10 @@ rtap_device_rx_worker(struct kthread_work* work)
     // Free frame
     kfree_skb(nskb);
     kfree_skb(wrk->skb);
-    kfree(wrk);
+
+    // Return work back to free list
+    rtap_device_kwork_free(wrk);
+
   }
 
   return;
@@ -242,38 +292,53 @@ rtap_device_recv(struct sk_buff *skb, struct net_device *dev,
     struct packet_type *pt, struct net_device *orig_dev)
 {
 
-  struct rtap_device* d = NULL;
+  int ret = 0;
+  struct rtap_device_kwork* wrk = rtap_device_kwork_alloc();
+  struct rtap_device* d = rtap_device_findbyname(dev->name);
 
-  d = rtap_device_findbyname(dev->name);
-  if (d)
+  if (wrk)
   {
-    struct rtap_device_kwork* wrk = NULL;
-    wrk = kmalloc(sizeof(struct rtap_device_kwork), GFP_KERNEL);
-    if (!wrk)
+    if (d)
     {
-      printk( KERN_CRIT "RTAP: Cannot allocate memory\n");
-      return (-1);
-    } // end if
-    memset((void *) wrk, 0, sizeof(struct rtap_device_kwork));
+      // Lock device list
+      spin_lock(&rtap_devices.lock);
 
-    // Update device counters
-    d->pkts++;
-    d->bytes += skb->len;
+      // Initialize work structure
+      memset((void *) wrk, 0, sizeof(struct rtap_device_kwork));
 
-    // Initialize work structure
-    init_kthread_work(&wrk->kwork, rtap_device_rx_worker);
-    wrk->dev = dev;
-    wrk->pt = pt;
-    wrk->skb = skb;
-    wrk->pkts = d->pkts;
-    wrk->bytes = d->bytes;
+      // Update device pkt counters
+      d->pkts++;
+      d->bytes += skb->len;
 
-    // Queue work
-    queue_kthread_work(&d->kworker, &wrk->kwork);
+      // Initialize work structure
+      init_kthread_work(&wrk->kwork, rtap_device_rx_worker);
+      wrk->dev = dev;
+      wrk->pt = pt;
+      wrk->skb = skb;
+      wrk->pkts = d->pkts;
+      wrk->bytes = d->bytes;
+
+      // Queue work
+      queue_kthread_work(&d->kworker, &wrk->kwork);
+
+      // Unlock device list
+      spin_unlock(&rtap_devices.lock);
+    }
+    else
+    {
+      printk( KERN_WARNING "RTAP: Cannot find device: %s\n", dev->name);
+      rtap_device_kwork_free(wrk);
+      ret = -1;
+    }
+  }
+  else
+  {
+    printk( KERN_WARNING "RTAP: Dropping packet\n");
+    ret = -1;
   }
 
   // Return success
-  return (0);
+  return (ret);
 }
 
 /******************************************************************************
@@ -412,8 +477,15 @@ rtap_device_findbyname(const char* devname)
 int
 rtap_device_init(void)
 {
+  int i;
   spin_lock_init(&rtap_devices.lock);
   INIT_LIST_HEAD(&rtap_devices.list);
+  rtap_kwork_tbl.freelist_index = 0;
+  for (i = 0; i < RTAP_DEVICE_KWORK_MAX; i++)
+  {
+    rtap_kwork_tbl.freelist[i] = &rtap_kwork_tbl.data[i];
+    rtap_kwork_tbl.freelist_index++;
+  }
   return (0);
 }
 
@@ -439,8 +511,8 @@ proc_show(struct seq_file *file, void *arg)
   spin_lock(&rtap_devices.lock);
   list_for_each_entry_safe(dev, tmp, &rtap_devices.list, list)
   {
-    seq_printf( file, "dev[%s]\tpkts[%u]\tbytes[%u]\n",
-        dev->pt.dev->name, dev->pkts, dev->bytes );
+    seq_printf( file, "dev[%s]\tpkts[%u]\tbytes[%u]\tdropped[%u]\n",
+        dev->pt.dev->name, dev->pkts, dev->bytes, dev->wrk_drop );
   } // end loop
   spin_unlock(&rtap_devices.lock);
 
