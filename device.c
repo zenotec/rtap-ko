@@ -188,6 +188,8 @@ rtap_device_rx_worker(struct kthread_work* work)
     // Create copy of socket buffer while adding headroom for metadata
     nskb = skb_copy_expand(wrk->skb, sizeof(struct rtap_device_skbmeta), 0, GFP_ATOMIC);
     skbmeta = (struct rtap_device_skbmeta* )skb_push(nskb, sizeof(struct rtap_device_skbmeta));
+
+    // Populate metadata header
     skbmeta->magic = cpu_to_be32(RTAP_MAGIC);
     skbmeta->ver = RTAP_VER;
     skbmeta->hdrlen = sizeof(struct rtap_device_skbmeta);

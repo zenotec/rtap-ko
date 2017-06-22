@@ -53,6 +53,7 @@ struct rtap_filter
   rtap_filter_type_t type;
   rtap_filter_subtype_t subtype;
   struct rtap_rule* rule;
+  unsigned int count;
   char *arg;
 };
 
@@ -77,6 +78,8 @@ static int
 rtap_filter_radiotap(struct rtap_filter *fp, struct sk_buff *skb);
 static int
 rtap_filter_80211(struct rtap_filter *fp, struct sk_buff *skb);
+static int
+rtap_filter_ip(struct rtap_filter *fp, struct sk_buff *skb);
 
 //*****************************************************************************
 // Global variables
@@ -92,7 +95,7 @@ static rtap_filter_func_t rtap_filtertbl[] =
     [FILTER_TYPE_ALL] = &rtap_filter_all,
     [FILTER_TYPE_RADIOTAP] = &rtap_filter_radiotap,
     [FILTER_TYPE_80211] = &rtap_filter_80211,
-    [FILTER_TYPE_IP] = NULL,
+    [FILTER_TYPE_IP] = &rtap_filter_ip,
     [FILTER_TYPE_UDP] = NULL,
     [FILTER_TYPE_TCP] = NULL,
     [FILTER_TYPE_LAST] = NULL
@@ -312,6 +315,35 @@ rtap_filter_set_subtype(struct rtap_filter* f, rtap_filter_subtype_t subtype)
   if (f && subtype)
   {
     f->subtype = subtype;
+    ret = 0;
+  }
+  return(ret);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static unsigned int
+rtap_filter_get_count(struct rtap_filter* f)
+{
+  unsigned int count = 0;
+  if (f)
+  {
+    count = f->count;
+  }
+  return (count);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int
+rtap_filter_set_count(struct rtap_filter* f, unsigned int count)
+{
+  int ret = -1;
+  if (f)
+  {
+    f->count = count;
     ret = 0;
   }
   return(ret);
@@ -543,16 +575,48 @@ rtap_filter_all(struct rtap_filter *f, struct sk_buff *skb)
   {
     switch (f->subtype)
     {
-    case FILTER_SUBTYPE_ALL_SIZE:
+
+    case FILTER_SUBTYPE_ALL_ALL:
+      f->count++;
+      ret = rtap_rule_invoke(f->rule, skb);
+      break;
+
+    case FILTER_SUBTYPE_ALL_SIZE_EQ:
+    {
+      int size = 0;
+      int cnt = sscanf(f->arg, "%d", &size);
+      if ((cnt == 1) && (skb->len == size))
+      {
+        f->count++;
+        ret = rtap_rule_invoke(f->rule, skb);
+      }
+      break;
+    }
+
+    case FILTER_SUBTYPE_ALL_SIZE_GE:
+    {
+      int size = 0;
+      int cnt = sscanf(f->arg, "%d", &size);
+      if ((cnt == 1) && (skb->len >= size))
+      {
+        f->count++;
+        ret = rtap_rule_invoke(f->rule, skb);
+      }
+      break;
+    }
+
+    case FILTER_SUBTYPE_ALL_SIZE_LE:
     {
       int size = 0;
       int cnt = sscanf(f->arg, "%d", &size);
       if ((cnt == 1) && (skb->len <= size))
       {
+        f->count++;
         ret = rtap_rule_invoke(f->rule, skb);
       }
       break;
     }
+
     default:
       break;
     }
@@ -586,6 +650,24 @@ rtap_filter_80211(struct rtap_filter *f, struct sk_buff *skb)
 {
   int ret = -1;
   if (f && (f->type == FILTER_TYPE_80211) && skb)
+  {
+    switch (f->subtype)
+    {
+    default:
+      break;
+    }
+  }
+  return(ret);
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+static int
+rtap_filter_ip(struct rtap_filter *f, struct sk_buff *skb)
+{
+  int ret = -1;
+  if (f && (f->type == FILTER_TYPE_IP) && skb)
   {
     switch (f->subtype)
     {
@@ -908,11 +990,51 @@ rtap_filter_subtype_str(struct rtap_filter* f)
   const char *str = 0;
   switch (f->type)
   {
-  case FILTER_SUBTYPE_NONE:
+  case FILTER_TYPE_ALL:
+  {
+    switch (f->subtype)
+    {
+    case FILTER_SUBTYPE_NONE:
+      str = "None";
+      break;
+    case FILTER_SUBTYPE_ALL_ALL:
+      str = "All";
+      break;
+    case FILTER_SUBTYPE_ALL_SIZE_EQ:
+      str = "Equal to size";
+      break;
+    case FILTER_SUBTYPE_ALL_SIZE_GE:
+      str = "Greater than, equal to size";
+      break;
+    case FILTER_SUBTYPE_ALL_SIZE_LE:
+      str = "Less than, equal to size";
+      break;
+    default:
+      str = "Unknown";
+      break;
+    }
     break;
-  case FILTER_SUBTYPE_ALL_SIZE:
-    str = "Size";
+  }
+  case FILTER_TYPE_RADIOTAP:
+  {
     break;
+  }
+  case FILTER_TYPE_80211:
+  {
+    break;
+  }
+  case FILTER_TYPE_IP:
+  {
+    break;
+  }
+  case FILTER_TYPE_UDP:
+  {
+    break;
+  }
+  case FILTER_TYPE_TCP:
+  {
+    break;
+  }
   default:
     str = "Unknown";
     break;
@@ -941,9 +1063,9 @@ proc_show(struct seq_file *file, void *arg)
     spin_lock( &c->lock );
     list_for_each_entry_safe( f, tmp_f, &c->filter.list, list )
     {
-      seq_printf( file, "\t%d\t%16s\t%16s\t%d\t%32s\n",
-          f->fid, rtap_filter_type_str(f), rtap_filter_subtype_str(f), rtap_filter_get_rule(f),
-          f->arg);
+      seq_printf( file, "\t[%u]\t%d\t%16s\t%16s\t%d\t%32s\n",
+          f->count, f->fid, rtap_filter_type_str(f),
+          rtap_filter_subtype_str(f), rtap_filter_get_rule(f), f->arg);
     } // end loop
     spin_unlock( &c->lock );
   } // end loop
