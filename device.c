@@ -24,6 +24,7 @@
 // Includes
 //*****************************************************************************
 
+#include <linux/version.h>
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
@@ -298,7 +299,11 @@ rtap_device_recv(struct sk_buff *skb, struct net_device *dev,
       d->bytes += skb->len;
 
       // Initialize work structure
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,9,0)
       init_kthread_work(&wrk->kwork, rtap_device_rx_worker);
+#else
+      kthread_init_work(&wrk->kwork, rtap_device_rx_worker);
+#endif
       wrk->dev = dev;
       wrk->pt = pt;
       wrk->skb = skb;
@@ -306,7 +311,11 @@ rtap_device_recv(struct sk_buff *skb, struct net_device *dev,
       wrk->bytes = d->bytes;
 
       // Queue work
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,9,0)
       queue_kthread_work(&d->kworker, &wrk->kwork);
+#else
+      kthread_queue_work(&d->kworker, &wrk->kwork);
+#endif
     }
     else
     {
@@ -393,7 +402,11 @@ rtap_device_add(const char *devname)
   dev->pt.func = rtap_device_recv;
 
   // Initialize workers
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,9,0)
   init_kthread_worker(&dev->kworker);
+#else
+  kthread_init_worker(&dev->kworker);
+#endif
   dev->kworker_task = kthread_run(kthread_worker_fn, &dev->kworker, "rtap-%s", devname);
 
   // Add device list item to tail of device list
