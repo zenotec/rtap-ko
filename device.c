@@ -85,6 +85,7 @@ struct rtap_device_skbmeta
 
 struct rtap_device_kwork_tbl
 {
+  spinlock_t lock;
   u32 freelist_index;
   struct rtap_device_kwork* freelist[RTAP_DEVICE_KWORK_MAX];
   struct rtap_device_kwork data[RTAP_DEVICE_KWORK_MAX];
@@ -180,7 +181,7 @@ rtap_device_kwork_alloc(void)
 {
   struct rtap_device_kwork* wrk = NULL;
 
-  spin_lock(&rtap_devices.lock);
+  spin_lock(&rtap_kwork_tbl.lock);
   if (rtap_kwork_tbl.freelist_index)
   {
     rtap_kwork_tbl.freelist_index--;
@@ -188,7 +189,7 @@ rtap_device_kwork_alloc(void)
     wrk = rtap_kwork_tbl.freelist[rtap_kwork_tbl.freelist_index];
     rtap_kwork_tbl.freelist[rtap_kwork_tbl.freelist_index] = NULL;
   }
-  spin_unlock(&rtap_devices.lock);
+  spin_unlock(&rtap_kwork_tbl.lock);
 
   return(wrk);
 }
@@ -202,11 +203,11 @@ rtap_device_kwork_free(struct rtap_device_kwork* wrk)
   if (wrk)
   {
     // Return work back to free list
-    spin_lock(&rtap_devices.lock);
+    spin_lock(&rtap_kwork_tbl.lock);
 //    printk( KERN_INFO "RTAP: Freeing kwork: %u\n", rtap_kwork_tbl.freelist_index);
     rtap_kwork_tbl.freelist[rtap_kwork_tbl.freelist_index] = wrk;
     rtap_kwork_tbl.freelist_index++;
-    spin_unlock(&rtap_devices.lock);
+    spin_unlock(&rtap_kwork_tbl.lock);
   }
 }
 
@@ -261,28 +262,13 @@ rtap_device_rx_worker(struct kthread_work* work)
     kfree_skb(nskb);
     kfree_skb(wrk->skb);
 
-    // Return work back to free list
+    // Return work structure back to free list
     rtap_device_kwork_free(wrk);
 
   }
 
   return;
 }
-
-/******************************************************************************
- *
- ******************************************************************************/
-//static void
-//rtap_device_tx_worker(struct kthread_work* work)
-//{
-//  struct rtap_device_kwork* wrk = NULL;
-//  printk( KERN_INFO "RTAP: rtap_device_tx_worker()\n");
-//  if (work)
-//  {
-//    wrk = to_rtap_device_kwork(work, kwork);
-//  }
-//  return;
-//}
 
 /******************************************************************************
  *
@@ -480,6 +466,7 @@ rtap_device_init(void)
   int i;
   spin_lock_init(&rtap_devices.lock);
   INIT_LIST_HEAD(&rtap_devices.list);
+  spin_lock_init(&rtap_kwork_tbl.lock);
   rtap_kwork_tbl.freelist_index = 0;
   for (i = 0; i < RTAP_DEVICE_KWORK_MAX; i++)
   {
